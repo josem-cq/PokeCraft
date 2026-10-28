@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [" G ", "GPG", " G "],
+  "key": {
+    "G": { "item": "minecraft:gold_ingot" },
+    "P": { "item": "pokecraft:pokeball" }
+  },
+  "result": { "id": "pokecraft:greatball", "count": 1 }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["GSG", "G G", "GGG"],
+  "key": {
+    "G": { "item": "minecraft:glass" },
+    "S": { "tag": "minecraft:wooden_slabs" }
+  },
+  "result": { "id": "pokecraft:mob_jar", "count": 1 }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["S S", "L L", " I "],
+  "key": {
+    "S": { "item": "minecraft:string" },
+    "L": { "item": "minecraft:leather" },
+    "I": { "item": "minecraft:iron_ingot" }
+  },
+  "result": { "id": "pokecraft:quiver", "count": 1 }
+}
