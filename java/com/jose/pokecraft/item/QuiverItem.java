@@ -1,4 +1,4 @@
-package com.tuusuario.pokecraft.item;
+package com.jose.pokecraft.item;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.Item;

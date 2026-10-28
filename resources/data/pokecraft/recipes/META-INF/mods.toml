@@ -1,0 +1,12 @@
+modLoader="lowcodefml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="pokecraft"
+version="1.0.0"
+displayName="PokeCraft"
+authors="Jose"
+description='''
+Mod ligero de PokeCraft para aljabas, Poké Balls y tarros de mobs.
+'''

@@ -1,4 +1,4 @@
-package com.tuusuario.pokecraft;
+package com.jose.pokecraft;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BlockItem;
@@ -25,16 +25,16 @@ public class PokeCraftMod {
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
 
     // Registro de Ítems (Aljaba y Poké Balls por Tiers)
-    public static final RegistryObject<Item> QUIVER = ITEMS.register("quiver", () -> new com.tuusuario.pokecraft.item.QuiverItem(new Item.Properties().stacksTo(1)));
+    public static final RegistryObject<Item> QUIVER = ITEMS.register("quiver", () -> new com.jose.pokecraft.item.QuiverItem(new Item.Properties().stacksTo(1)));
     
-    public static final RegistryObject<Item> POKEBALL = ITEMS.register("pokeball", () -> new com.tuusuario.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.tuusuario.pokecraft.item.PokeballItem.Tier.POKEBALL));
-    public static final RegistryObject<Item> GREATBALL = ITEMS.register("greatball", () -> new com.tuusuario.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.tuusuario.pokecraft.item.PokeballItem.Tier.GREATBALL));
-    public static final RegistryObject<Item> SUPERBALL = ITEMS.register("superball", () -> new com.tuusuario.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.tuusuario.pokecraft.item.PokeballItem.Tier.SUPERBALL));
-    public static final RegistryObject<Item> ULTRABALL = ITEMS.register("ultraball", () -> new com.tuusuario.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.tuusuario.pokecraft.item.PokeballItem.Tier.ULTRABALL));
-    public static final RegistryObject<Item> MASTERBALL = ITEMS.register("masterball", () -> new com.tuusuario.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(1), com.tuusuario.pokecraft.item.PokeballItem.Tier.MASTERBALL));
+    public static final RegistryObject<Item> POKEBALL = ITEMS.register("pokeball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.jose.pokecraft.item.PokeballItem.Tier.POKEBALL));
+    public static final RegistryObject<Item> GREATBALL = ITEMS.register("greatball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.jose.pokecraft.item.PokeballItem.Tier.GREATBALL));
+    public static final RegistryObject<Item> SUPERBALL = ITEMS.register("superball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.jose.pokecraft.item.PokeballItem.Tier.SUPERBALL));
+    public static final RegistryObject<Item> ULTRABALL = ITEMS.register("ultraball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.jose.pokecraft.item.PokeballItem.Tier.ULTRABALL));
+    public static final RegistryObject<Item> MASTERBALL = ITEMS.register("masterball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(1), com.jose.pokecraft.item.PokeballItem.Tier.MASTERBALL));
 
     // Registro del Tarro de Mobs (Bloque e Item asociado)
-    public static final RegistryObject<Block> MOB_JAR_BLOCK = BLOCKS.register("mob_jar", () -> new com.tuusuario.pokecraft.block.MobJarBlock(
+    public static final RegistryObject<Block> MOB_JAR_BLOCK = BLOCKS.register("mob_jar", () -> new com.jose.pokecraft.block.MobJarBlock(
         BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_LIGHT_BLUE).strength(0.5F).sound(SoundType.GLASS).noOcclusion()
     ));
     public static final RegistryObject<Item> MOB_JAR_ITEM = ITEMS.register("mob_jar", () -> new BlockItem(MOB_JAR_BLOCK.get(), new Item.Properties().stacksTo(64)));

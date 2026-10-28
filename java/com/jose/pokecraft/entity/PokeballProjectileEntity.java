@@ -1,6 +1,6 @@
-package com.tuusuario.pokecraft.entity;
+package com.jose.pokecraft.entity;
 
-import com.tuusuario.pokecraft.item.PokeballItem;
+import com.jose.pokecraft.item.PokeballItem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -31,7 +31,7 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
 
     @Override
     protected Item getDefaultItem() {
-        return com.tuusuario.pokecraft.PokeCraftMod.POKEBALL.get();
+        return com.jose.pokecraft.PokeCraftMod.POKEBALL.get();
     }
 
     @Override

@@ -1,4 +1,4 @@
-package com.tuusuario.pokecraft.block;
+package com.jose.pokecraft.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -9,7 +9,7 @@ public class MobJarBlockEntity extends BlockEntity {
     private CompoundTag storedEntityTag;
 
     public MobJarBlockEntity(BlockPos pos, BlockState state) {
-        super(com.tuusuario.pokecraft.PokeCraftMod.BLOCK_ENTITIES.get("mob_jar_be").get(), pos, state);
+        super(com.jose.pokecraft.PokeCraftMod.BLOCK_ENTITIES.get("mob_jar_be").get(), pos, state);
     }
 
     @Override

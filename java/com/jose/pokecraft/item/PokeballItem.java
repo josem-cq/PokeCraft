@@ -1,6 +1,6 @@
-package com.tuusuario.pokecraft.item;
+package com.jose.pokecraft.item;
 
-import com.tuusuario.pokecraft.entity.PokeballProjectileEntity;
+import com.jose.pokecraft.entity.PokeballProjectileEntity;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;

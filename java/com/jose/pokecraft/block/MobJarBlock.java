@@ -1,6 +1,6 @@
-package com.tuusuario.pokecraft.block;
+package com.jose.pokecraft.block;
 
-import com.tuusuario.pokecraft.item.PokeballItem;
+import com.jose.pokecraft.item.PokeballItem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -13,6 +13,9 @@ import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+
+import java.util.Properties;
+
 import org.jetbrains.annotations.Nullable;
 
 public class MobJarBlock extends Block implements EntityBlock {
@@ -45,7 +48,7 @@ public class MobJarBlock extends Block implements EntityBlock {
             } 
             // Extrae el mob del tarro de vuelta a una Poké Ball vacía (o mano)
             else if (jar.getStoredEntityTag() != null && held.isEmpty()) {
-                ItemStack emptyBall = new ItemStack(com.tuusuario.pokecraft.PokeCraftMod.POKEBALL.get());
+                ItemStack emptyBall = new ItemStack(com.jose.pokecraft.PokeCraftMod.POKEBALL.get());
                 emptyBall.getOrCreateTag().put("CapturedEntity", jar.getStoredEntityTag());
                 
                 if (!player.addItem(emptyBall)) {

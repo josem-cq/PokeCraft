@@ -1,6 +1,6 @@
-package com.tuusuario.pokecraft.event;
+package com.jose.pokecraft.event;
 
-import com.tuusuario.pokecraft.item.PokeballItem;
+import com.jose.pokecraft.item.PokeballItem;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
@@ -30,7 +30,7 @@ public class ModEventHandlers {
             // 1. RECUPERAR MOB CON MANO VACÍA (Únicamente el dueño)
             if (heldItem.isEmpty() && persistent.contains("PokeCraftFriendly")) {
                 if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
-                    ItemStack filledPokeball = new ItemStack(com.tuusuario.pokecraft.PokeCraftMod.POKEBALL.get());
+                    ItemStack filledPokeball = new ItemStack(com.jose.pokecraft.PokeCraftMod.POKEBALL.get());
                     CompoundTag entityTag = new CompoundTag();
                     target.save(entityTag);
                     entityTag.remove("UUID");
