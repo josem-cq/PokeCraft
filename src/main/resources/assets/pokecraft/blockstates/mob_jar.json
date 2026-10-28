@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "pokecraft:block/mob_jar"
+    }
+  }
+}

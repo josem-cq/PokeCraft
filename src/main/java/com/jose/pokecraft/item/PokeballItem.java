@@ -1,6 +1,7 @@
 package com.jose.pokecraft.item;
 
 import com.jose.pokecraft.entity.PokeballProjectileEntity;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -13,19 +14,12 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 
 public class PokeballItem extends Item {
     public enum Tier {
-        POKEBALL(1.0),
-        GREATBALL(1.5),
-        SUPERBALL(1.75),
-        ULTRABALL(2.0),
-        MASTERBALL(100.0); // 100% garantizado (Endgame con Estrella del Nether)
-
-        private final double multiplier;
-        Tier(double multiplier) { this.multiplier = multiplier; }
-        public double getMultiplier() { return multiplier; }
+        POKEBALL, GREATBALL, SUPERBALL, ULTRABALL, MASTERBALL
     }
 
     private final Tier tier;
@@ -35,107 +29,82 @@ public class PokeballItem extends Item {
         this.tier = tier;
     }
 
+    public Tier getTier() {
+        return tier;
+    }
+
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, net.minecraft.world.InteractionHand hand) {
-        ItemStack stack = player.getItemInHand(hand);
+        ItemStack itemstack = player.getItemInHand(hand);
         
-        // Sonido clásico al lanzar un proyectil esférico
         level.playSound(null, player.getX(), player.getY(), player.getZ(), 
-            SoundEvents.SNOWBALL_THROW, SoundSource.PLAYERS, 0.5f, 0.4f / (level.getRandom().nextFloat() * 0.4f + 0.8f));
+            SoundEvents.SNOWBALL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (level.getRandom().nextFloat() * 0.4F + 0.8F));
 
-        if (!level.isClientSide) {
-            PokeballProjectileEntity projectile = new PokeballProjectileEntity(level, player, this.tier);
-            projectile.setItem(stack);
-            projectile.shootFromRotation(player, player.getXRot(), player.getYRot(), 0.0f, 1.5f, 1.0f);
+        if (!level.isClientSide()) {
+            PokeballProjectileEntity projectile = new PokeballProjectileEntity(level, player, tier);
+            projectile.setItem(itemstack);
+            projectile.shootFromRotation(player, player.getXRot(), player.getYRot(), 0.0F, 1.5F, 1.0F);
             level.addFreshEntity(projectile);
         }
 
         player.awardStat(Stats.ITEM_USED.get(this));
-        
         if (!player.getAbilities().instabuild) {
-            stack.shrink(1);
+            itemstack.shrink(1);
         }
 
-        // Aplica cooldown idéntico al de una Ender Pearl (20 ticks = 1 segundo)
-        player.getCooldowns().addCooldown(this, 20);
-
-        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
+        return InteractionResultHolder.sidedSuccess(itemstack, level.isClientSide());
     }
 
-    // Algoritmo de captura con reglas de salud y tipos de mobs
-    public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack pokeballStack) {
-        if (tier == Tier.MASTERBALL) {
-            storeEntityInPokeball(pokeballStack, target, player);
-            return true;
+    public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack thrownStack) {
+        if (target.level().isClientSide()) return false;
+
+        // No capturar jugadores ni jefes si se desea, o validar salud
+        float maxHealth = target.getMaxHealth();
+        float currentHealth = target.getHealth();
+        float healthPercent = currentHealth / maxHealth;
+
+        // Probabilidad base según el tier de la Poké Ball y la vida restante
+        float catchRate = (1.0f - healthPercent) * 0.5f;
+        
+        switch (tier) {
+            case GREATBALL -> catchRate += 0.15f;
+            case SUPERBALL -> catchRate += 0.30f;
+            case ULTRABALL -> catchRate += 0.50f;
+            case MASTERBALL -> catchRate = 1.0f; // Infalible
+            default -> {}
         }
 
-        float healthPercent = target.getHealth() / target.getMaxHealth();
-        double baseChance = 0.0;
+        if (target.level().getRandom().nextFloat() <= catchRate) {
+            // Captura exitosa: guardar entidad en la Poké Ball
+            CompoundTag entityTag = new CompoundTag();
+            target.save(entityTag);
 
-        if (target instanceof Animal) {
-            baseChance = 1.0; // Pasivos: 100% de base
-        } else if (isNeutralMob(target)) {
-            // Neutrales: hasta 88% cuando están por debajo del 50% de vida
-            baseChance = (healthPercent <= 0.5f) ? 0.88 * (1.0 - (healthPercent / 0.5f) * 0.2) : 0.20;
-        } else if (target instanceof Monster) {
-            // Agresivos: hasta 30% cuando están a 2 corazones o menos (<= 4 HP)
-            if (target.getHealth() <= 4.0f) {
-                baseChance = 0.30;
-            } else if (healthPercent <= 0.5f) {
-                baseChance = 0.10;
-            } else {
-                baseChance = 0.02;
+            ItemStack filledStack = new ItemStack(com.jose.pokecraft.PokeCraftMod.POKEBALL.get());
+            
+            // Reemplazado getOrCreateTag() por CustomData en la 1.21
+            CompoundTag tag = filledStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+            tag.put("CapturedEntity", entityTag);
+            filledStack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+
+            if (!player.getInventory().add(filledStack)) {
+                player.drop(filledStack, false);
             }
-        }
 
-        double finalChance = baseChance * tier.getMultiplier();
-
-        if (Math.random() <= finalChance) {
-            storeEntityInPokeball(pokeballStack, target, player);
+            target.discard(); // Eliminar la entidad del mundo
             return true;
         }
+
         return false;
     }
 
-    private static boolean isNeutralMob(LivingEntity target) {
-        return target instanceof net.minecraft.world.entity.animal.Wolf || 
-               target instanceof net.minecraft.world.entity.monster.EnderMan;
-    }
-
-    // Almacena NBT completo y entrega la Poké Ball llena al jugador
-    public static void storeEntityInPokeball(ItemStack pokeball, LivingEntity target, Player player) {
-        CompoundTag entityTag = new CompoundTag();
-        target.save(entityTag);
-        entityTag.remove("UUID"); // Limpia la UUID para evitar errores al re-spawnear
-
-        ItemStack filledStack = new ItemStack(pokeball.getItem());
-        CompoundTag itemTag = filledStack.getOrCreateTag();
-        itemTag.put("CapturedEntity", entityTag);
-
-        if (!player.addItem(filledStack)) {
-            player.drop(filledStack, false);
-        }
-        target.discard(); // Elimina al mob del mundo tras capturarlo con éxito
-    }
-
-    // Libera al mob convirtiéndolo en aliado leal del jugador
     public static void releaseEntity(ServerLevel level, CompoundTag entityTag, net.minecraft.core.BlockPos pos, Player player) {
-        if (entityTag == null || entityTag.isEmpty()) return;
-
         net.minecraft.world.entity.Entity entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(entityTag, level, e -> {
-            e.setPos(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            e.moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, level.getRandom().nextFloat() * 360.0F, 0.0F);
             return e;
         });
 
-        if (entity instanceof LivingEntity living) {
-            CompoundTag persistent = living.getPersistentData();
-            persistent.putBoolean("PokeCraftFriendly", true);
-            persistent.putUUID("OwnerUUID", player.getUUID());
-
-            if (living instanceof net.minecraft.world.entity.Mob mob) {
-                mob.setTarget(null);
-            }
+        if (entity != null) {
+            level.addFreshEntity(entity);
         }
-        level.addFreshEntity(entity);
     }
 }

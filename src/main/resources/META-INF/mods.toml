@@ -1,4 +1,4 @@
-modLoader="lowcodefml"
+modLoader="javafml"
 loaderVersion="[1,)"
 license="All Rights Reserved"
 
@@ -10,3 +10,10 @@ authors="Jose"
 description='''
 Mod ligero de PokeCraft para aljabas, Poké Balls y tarros de mobs.
 '''
+
+[[dependencies.pokecraft]]
+modId="neoforge"
+type="mandatory"
+versionRange="[21.1.262,)"
+ordering="NONE"
+side="BOTH"

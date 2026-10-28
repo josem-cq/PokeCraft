@@ -10,11 +10,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomData;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 
-@Mod.EventBusSubscriber(modid = com.jose.pokecraft.PokeCraftMod.MOD_ID)
+@EventBusSubscriber(modid = com.jose.pokecraft.PokeCraftMod.MOD_ID)
 public class ModEventHandlers {
 
     @SubscribeEvent
@@ -33,7 +34,8 @@ public class ModEventHandlers {
                     CompoundTag entityTag = new CompoundTag();
                     target.save(entityTag);
                     entityTag.remove("UUID");
-                    filledPokeball.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(entityTag));
+                    
+                    filledPokeball.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, CustomData.of(entityTag));
 
                     if (!player.addItem(filledPokeball)) {
                         player.drop(filledPokeball, false);
@@ -48,7 +50,7 @@ public class ModEventHandlers {
                 }
             }
 
-            // 2. DAR ÓRDENES TÁCTICAS CON EL PALO (Quieto, Siguiendo, Protegiendo)
+            // 2. DAR ÓRDENES TÁCTICAS CON EL PALO
             if (heldItem.is(Items.STICK) && persistent.contains("PokeCraftFriendly")) {
                 if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
                     int state = persistent.getInt("MobOrderState");
@@ -58,7 +60,7 @@ public class ModEventHandlers {
                     String msg = switch (state) {
                         case 0 -> "§bModo: Siguiendo";
                         case 1 -> "§eModo: Quieto";
-                        case 2 -> "§cModo: Protegiendo (Comportamiento de Lobo)";
+                        case 2 -> "§cModo: Protegiendo";
                         default -> "";
                     };
                     player.sendSystemMessage(Component.literal(msg));
@@ -69,7 +71,7 @@ public class ModEventHandlers {
                 }
             }
 
-            // 3. CURAR AL MOB CON CUALQUIER TIPO DE COMIDA
+            // 3. CURAR AL MOB CON COMIDA
             FoodProperties food = heldItem.getFoodProperties(target);
             if (food != null && target.getHealth() < target.getMaxHealth() && persistent.contains("PokeCraftFriendly")) {
                 target.heal(food.nutrition() * 2);

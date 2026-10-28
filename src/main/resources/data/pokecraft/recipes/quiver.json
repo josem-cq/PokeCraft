@@ -1,6 +1,6 @@
 {
   "type": "minecraft:crafting_shaped",
-  "pattern": ["S S", "L L", " I "],
+  "pattern": ["S S", "LIL", " L "],
   "key": {
     "S": { "item": "minecraft:string" },
     "L": { "item": "minecraft:leather" },

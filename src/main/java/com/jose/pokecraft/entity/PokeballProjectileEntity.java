@@ -12,6 +12,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ThrowableItemProjectile;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -40,7 +41,10 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         if (this.level().isClientSide) return;
 
         ItemStack stack = this.getItem();
-        CompoundTag tag = stack.getTag();
+        // Adaptado a la 1.21 usando CustomData en lugar de stack.getTag()
+        CustomData customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+        CompoundTag tag = customData != null ? customData.copyTag() : null;
+        
         Player player = (Player) this.getOwner();
 
         if (tag != null && tag.contains("CapturedEntity")) {
@@ -63,7 +67,10 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         if (this.level().isClientSide) return;
 
         ItemStack stack = this.getItem();
-        CompoundTag tag = stack.getTag();
+        // Adaptado a la 1.21 usando CustomData en lugar de stack.getTag()
+        CustomData customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+        CompoundTag tag = customData != null ? customData.copyTag() : null;
+        
         Player player = (Player) this.getOwner();
 
         if (tag != null && tag.contains("CapturedEntity")) {
@@ -76,7 +83,7 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         }
     }
 
-    // Simula la probabilidad de rotura del Ojo de Ender (20% de destruirse, 80% cae al suelo)
+    // Simula la probabilidad de rotura (20% de destruirse, 80% cae al suelo)
     private void handleEmptyBreakOrDrop(ItemStack stack) {
         if (this.random.nextFloat() < 0.20f) {
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(), 
