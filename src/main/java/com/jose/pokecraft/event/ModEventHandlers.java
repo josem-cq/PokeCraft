@@ -1,6 +1,5 @@
 package com.jose.pokecraft.event;
 
-import com.jose.pokecraft.item.PokeballItem;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
@@ -11,11 +10,11 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 
-@Mod.EventBusSubscriber
+@Mod.EventBusSubscriber(modid = com.jose.pokecraft.PokeCraftMod.MOD_ID)
 public class ModEventHandlers {
 
     @SubscribeEvent
@@ -34,7 +33,7 @@ public class ModEventHandlers {
                     CompoundTag entityTag = new CompoundTag();
                     target.save(entityTag);
                     entityTag.remove("UUID");
-                    filledPokeball.getOrCreateTag().put("CapturedEntity", entityTag);
+                    filledPokeball.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(entityTag));
 
                     if (!player.addItem(filledPokeball)) {
                         player.drop(filledPokeball, false);
@@ -72,7 +71,7 @@ public class ModEventHandlers {
 
             // 3. CURAR AL MOB CON CUALQUIER TIPO DE COMIDA
             FoodProperties food = heldItem.getFoodProperties(target);
-            if (food != null && target.getHealth() < target.getMaxHealth() && persistent.contains("SimpPokeCraftFriendlyleQuiverFriendly")) {
+            if (food != null && target.getHealth() < target.getMaxHealth() && persistent.contains("PokeCraftFriendly")) {
                 target.heal(food.nutrition() * 2);
                 if (!player.getAbilities().instabuild) {
                     heldItem.shrink(1);
