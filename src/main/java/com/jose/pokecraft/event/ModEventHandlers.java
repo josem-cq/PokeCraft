@@ -1,5 +1,7 @@
 package com.jose.pokecraft.event;
 
+import com.jose.pokecraft.PokeCraftMod;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
@@ -13,9 +15,11 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
-@EventBusSubscriber(modid = com.jose.pokecraft.PokeCraftMod.MOD_ID)
+@EventBusSubscriber(modid = PokeCraftMod.MOD_ID)
 public class ModEventHandlers {
 
     @SubscribeEvent
@@ -30,12 +34,15 @@ public class ModEventHandlers {
             // 1. RECUPERAR MOB CON MANO VACÍA (Únicamente el dueño)
             if (heldItem.isEmpty() && persistent.contains("PokeCraftFriendly")) {
                 if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
-                    ItemStack filledPokeball = new ItemStack(com.jose.pokecraft.PokeCraftMod.POKEBALL.get());
+                    ItemStack filledPokeball = new ItemStack(PokeCraftMod.POKEBALL.get());
                     CompoundTag entityTag = new CompoundTag();
                     target.save(entityTag);
                     entityTag.remove("UUID");
                     
-                    filledPokeball.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, CustomData.of(entityTag));
+                    filledPokeball.set(DataComponents.CUSTOM_DATA, CustomData.of(entityTag));
+                    if (target.hasCustomName()) {
+                        filledPokeball.set(DataComponents.CUSTOM_NAME, target.getCustomName());
+                    }
 
                     if (!player.addItem(filledPokeball)) {
                         player.drop(filledPokeball, false);
@@ -50,21 +57,26 @@ public class ModEventHandlers {
                 }
             }
 
-            // 2. DAR ÓRDENES TÁCTICAS CON EL PALO
+            // 2. DAR ÓRDENES TÁCTICAS CON EL PALO E INDICADOR VISUAL
             if (heldItem.is(Items.STICK) && persistent.contains("PokeCraftFriendly")) {
                 if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
                     int state = persistent.getInt("MobOrderState");
                     state = (state + 1) % 3;
                     persistent.putInt("MobOrderState", state);
 
-                    String msg = switch (state) {
-                        case 0 -> "§bModo: Siguiendo";
-                        case 1 -> "§eModo: Quieto";
-                        case 2 -> "§cModo: Protegiendo";
-                        default -> "";
+                    String stateStr = switch (state) {
+                        case 0 -> "siguiendo";
+                        case 1 -> "quieto";
+                        case 2 -> "protegiendo";
+                        default -> "siguiendo";
                     };
-                    player.sendSystemMessage(Component.literal(msg));
 
+                    Component mobName = target.hasCustomName() ? target.getCustomName() : target.getDisplayName();
+                    Component message = Component.literal("[").append(mobName).append("] ahora está " + stateStr);
+                    
+                    player.displayClientMessage(message, true);
+
+                    event.getLevel().playSound(null, target.blockPosition(), SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.8f, 1.2f);
                     event.setCancellationResult(InteractionResult.SUCCESS);
                     event.setCanceled(true);
                     return;
@@ -81,6 +93,36 @@ public class ModEventHandlers {
                 event.getLevel().playSound(null, target.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 1.0f, 1.0f);
                 event.setCancellationResult(InteractionResult.SUCCESS);
                 event.setCanceled(true);
+            }
+        }
+    }
+
+    // Sincronización de nombre en Yunque
+    @SubscribeEvent
+    public static void onAnvilUpdate(AnvilUpdateEvent event) {
+        ItemStack left = event.getLeft();
+        if (left.getItem() instanceof com.jose.pokecraft.item.PokeballItem) {
+            CustomData customData = left.get(DataComponents.CUSTOM_DATA);
+            if (customData != null) {
+                CompoundTag tag = customData.copyTag();
+                if (tag.contains("CapturedEntity") && event.getName() != null && !event.getName().isEmpty()) {
+                    ItemStack output = left.copy();
+                    Component newName = Component.literal(event.getName());
+                    output.set(DataComponents.CUSTOM_NAME, newName);
+
+                    CompoundTag entityTag = tag.getCompound("CapturedEntity");
+                    var registries = ServerLifecycleHooks.getCurrentServer() != null ? 
+                        ServerLifecycleHooks.getCurrentServer().registryAccess() : null;
+                    if (registries != null) {
+                        entityTag.putString("CustomName", Component.Serializer.toJson(newName, registries));
+                    }
+                    tag.put("CapturedEntity", entityTag);
+                    output.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+
+                    event.setOutput(output);
+                    event.setCost(5);
+                    event.setMaterialCost(1);
+                }
             }
         }
     }
