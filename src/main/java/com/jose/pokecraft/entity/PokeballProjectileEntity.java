@@ -2,6 +2,7 @@ package com.jose.pokecraft.entity;
 
 import com.jose.pokecraft.item.PokeballItem;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -41,8 +42,7 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         if (this.level().isClientSide) return;
 
         ItemStack stack = this.getItem();
-        // Adaptado a la 1.21 usando CustomData en lugar de stack.getTag()
-        CustomData customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         CompoundTag tag = customData != null ? customData.copyTag() : null;
         
         Player player = (Player) this.getOwner();
@@ -50,10 +50,10 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         if (tag != null && tag.contains("CapturedEntity")) {
             CompoundTag entityTag = tag.getCompound("CapturedEntity");
             PokeballItem.releaseEntity((ServerLevel) this.level(), entityTag, this.blockPosition(), player);
-            this.discard(); // La Poké Ball se destruye al desplegar el mob
+            this.discard();
         } else if (result.getEntity() instanceof LivingEntity target) {
-            boolean success = PokeballItem.attemptCatch(target, player, tier, stack);
-            if (success) {
+            boolean wasSuccessful = PokeballItem.attemptCatch(target, player, tier, stack);
+            if (wasSuccessful) {
                 this.discard();
             } else {
                 handleEmptyBreakOrDrop(stack);
@@ -67,8 +67,7 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         if (this.level().isClientSide) return;
 
         ItemStack stack = this.getItem();
-        // Adaptado a la 1.21 usando CustomData en lugar de stack.getTag()
-        CustomData customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         CompoundTag tag = customData != null ? customData.copyTag() : null;
         
         Player player = (Player) this.getOwner();
@@ -83,9 +82,11 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         }
     }
 
-    // Simula la probabilidad de rotura (20% de destruirse, 80% cae al suelo)
     private void handleEmptyBreakOrDrop(ItemStack stack) {
-        if (this.random.nextFloat() < 0.20f) {
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        boolean hasMob = customData != null && customData.copyTag().contains("CapturedEntity");
+
+        if (!hasMob && this.random.nextFloat() < 0.20f) {
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(), 
                 SoundEvents.ITEM_BREAK, SoundSource.PLAYERS, 0.8f, 0.8f);
             this.discard();

@@ -1,6 +1,8 @@
 package com.jose.pokecraft.event;
 
 import com.jose.pokecraft.PokeCraftMod;
+import com.jose.pokecraft.item.PokeballItem;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -8,16 +10,21 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
+
+import java.util.UUID;
 
 @EventBusSubscriber(modid = PokeCraftMod.MOD_ID)
 public class ModEventHandlers {
@@ -31,15 +38,26 @@ public class ModEventHandlers {
         if (event.getTarget() instanceof LivingEntity target) {
             CompoundTag persistent = target.getPersistentData();
 
-            // 1. RECUPERAR MOB CON MANO VACÍA (Únicamente el dueño)
+            // 1. RECUPERAR MOB CON MANO VACÍA (Únicamente el dueño) - Infinito y conserva el Tier exacto
             if (heldItem.isEmpty() && persistent.contains("PokeCraftFriendly")) {
                 if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
-                    ItemStack filledPokeball = new ItemStack(PokeCraftMod.POKEBALL.get());
+                    Item pokeballItem = PokeCraftMod.POKEBALL.get();
+                    if (persistent.contains("PokeballRegistryName")) {
+                        Item foundItem = BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(persistent.getString("PokeballRegistryName")));
+                        if (foundItem != null) {
+                            pokeballItem = foundItem;
+                        }
+                    }
+
+                    ItemStack filledPokeball = new ItemStack(pokeballItem);
                     CompoundTag entityTag = new CompoundTag();
                     target.save(entityTag);
                     entityTag.remove("UUID");
                     
-                    filledPokeball.set(DataComponents.CUSTOM_DATA, CustomData.of(entityTag));
+                    CompoundTag tag = filledPokeball.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+                    tag.put("CapturedEntity", entityTag);
+                    filledPokeball.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+
                     if (target.hasCustomName()) {
                         filledPokeball.set(DataComponents.CUSTOM_NAME, target.getCustomName());
                     }
@@ -57,7 +75,7 @@ public class ModEventHandlers {
                 }
             }
 
-            // 2. DAR ÓRDENES TÁCTICAS CON EL PALO E INDICADOR VISUAL
+            // 2. DAR ÓRDENES TÁCTICAS EXCLUSIVAMENTE CON EL PALO
             if (heldItem.is(Items.STICK) && persistent.contains("PokeCraftFriendly")) {
                 if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
                     int state = persistent.getInt("MobOrderState");
@@ -97,11 +115,27 @@ public class ModEventHandlers {
         }
     }
 
+    // Prevenir que los mobs aliados ataquen a su dueño y limpiar su objetivo hostil
+    @SubscribeEvent
+    public static void onLivingIncomingDamage(LivingIncomingDamageEvent event) {
+        if (event.getSource().getEntity() instanceof LivingEntity attacker && event.getEntity() instanceof Player player) {
+            if (attacker.getPersistentData().contains("PokeCraftFriendly")) {
+                UUID ownerUUID = attacker.getPersistentData().getUUID("OwnerUUID");
+                if (player.getUUID().equals(ownerUUID)) {
+                    event.setCanceled(true);
+                    if (attacker instanceof Mob mob) {
+                        mob.setTarget(null);
+                    }
+                }
+            }
+        }
+    }
+
     // Sincronización de nombre en Yunque
     @SubscribeEvent
     public static void onAnvilUpdate(AnvilUpdateEvent event) {
         ItemStack left = event.getLeft();
-        if (left.getItem() instanceof com.jose.pokecraft.item.PokeballItem) {
+        if (left.getItem() instanceof PokeballItem) {
             CustomData customData = left.get(DataComponents.CUSTOM_DATA);
             if (customData != null) {
                 CompoundTag tag = customData.copyTag();

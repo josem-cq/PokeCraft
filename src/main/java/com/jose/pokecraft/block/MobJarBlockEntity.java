@@ -2,7 +2,6 @@ package com.jose.pokecraft.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -13,6 +12,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class MobJarBlockEntity extends BlockEntity {
     private CompoundTag storedEntityTag;
+    private Component customName;
     private Entity cachedEntity;
 
     public MobJarBlockEntity(BlockPos pos, BlockState state) {
@@ -25,14 +25,22 @@ public class MobJarBlockEntity extends BlockEntity {
         if (storedEntityTag != null) {
             tag.put("StoredEntity", storedEntityTag);
         }
+        if (customName != null) {
+            tag.putString("CustomName", Component.Serializer.toJson(customName, registries));
+        }
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         if (tag.contains("StoredEntity")) {
-            storedEntityTag = tag.getCompound("StoredEntity");
-            cachedEntity = null;
+            this.storedEntityTag = tag.getCompound("StoredEntity");
+            this.cachedEntity = null;
+        }
+        if (tag.contains("CustomName")) {
+            try {
+                this.customName = Component.Serializer.fromJson(tag.getString("CustomName"), registries);
+            } catch (Exception ignored) {}
         }
     }
 
@@ -44,17 +52,26 @@ public class MobJarBlockEntity extends BlockEntity {
         return storedEntityTag;
     }
 
+    public void setStoredEntityTag(CompoundTag tag) {
+        this.storedEntityTag = tag;
+        this.cachedEntity = null;
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
     public boolean hasCustomName() {
-        return storedEntityTag != null && storedEntityTag.contains("CustomName");
+        return customName != null;
     }
 
     public Component getCustomName() {
-        if (hasCustomName()) {
-            try {
-                return Component.Serializer.fromJson(storedEntityTag.getString("CustomName"), level != null ? level.registryAccess() : null);
-            } catch (Exception ignored) {}
-        }
-        return null;
+        return customName;
+    }
+
+    public void setCustomName(Component customName) {
+        this.customName = customName;
+        setChanged();
     }
 
     public Entity getRenderEntity() {

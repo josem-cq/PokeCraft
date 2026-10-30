@@ -2,6 +2,7 @@ package com.jose.pokecraft.item;
 
 import com.jose.pokecraft.entity.PokeballProjectileEntity;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -40,7 +41,6 @@ public class PokeballItem extends Item {
         level.playSound(null, player.getX(), player.getY(), player.getZ(), 
             SoundEvents.SNOWBALL_THROW, SoundSource.NEUTRAL, 0.5F, 0.4F / (level.getRandom().nextFloat() * 0.4F + 0.8F));
 
-        // Punto 1: Cooldown de Pokéballs en la barra de acceso rápido
         player.getCooldowns().addCooldown(this, 20);
 
         if (!level.isClientSide()) {
@@ -61,7 +61,6 @@ public class PokeballItem extends Item {
     public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack thrownStack) {
         if (target.level().isClientSide()) return false;
 
-        // Punto 9: Captura del Ender Dragon u otros jefes con Masterball sin restricciones
         boolean isEnderDragon = target.getType() == EntityType.ENDER_DRAGON;
         if (tier == Tier.MASTERBALL || (isEnderDragon && tier == Tier.MASTERBALL)) {
             return executeCatch(target, player, thrownStack);
@@ -92,19 +91,19 @@ public class PokeballItem extends Item {
         CompoundTag entityTag = new CompoundTag();
         target.save(entityTag);
 
-        // Punto 3: Generar la Poké Ball del mismo tier exacto que fue lanzado
+        // Guardar el registro del item exacto de la Poké Ball en los datos de la entidad
+        entityTag.putString("PokeballRegistryName", BuiltInRegistries.ITEM.getKey(thrownStack.getItem()).toString());
+
         ItemStack filledStack = new ItemStack(thrownStack.getItem());
         
         CompoundTag tag = filledStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
         tag.put("CapturedEntity", entityTag);
         filledStack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
 
-        // Punto 2: Heredar nombre personalizado del mob capturado
         if (target.hasCustomName()) {
             filledStack.set(DataComponents.CUSTOM_NAME, target.getCustomName());
         }
 
-        // Punto 4: Posición de Drop exacta en el mundo donde estaba el mob
         ItemEntity itemEntity = new ItemEntity(target.level(), target.getX(), target.getY(), target.getZ(), filledStack);
         itemEntity.setPickUpDelay(20);
         target.level().addFreshEntity(itemEntity);
@@ -119,12 +118,14 @@ public class PokeballItem extends Item {
             return e;
         });
 
-        // Punto 5: Configuración del Sistema de Aliados / Amistad
         if (entity instanceof LivingEntity living) {
             CompoundTag persistent = living.getPersistentData();
             persistent.putBoolean("PokeCraftFriendly", true);
             persistent.putUUID("OwnerUUID", player.getUUID());
-            persistent.putInt("MobOrderState", 0); // 0: Siguiendo
+            persistent.putInt("MobOrderState", 0);
+            if (entityTag.contains("PokeballRegistryName")) {
+                persistent.putString("PokeballRegistryName", entityTag.getString("PokeballRegistryName"));
+            }
         }
 
         if (entity != null) {
