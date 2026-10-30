@@ -8,6 +8,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -33,77 +34,94 @@ public class ModEventHandlers {
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (event.getLevel().isClientSide()) return;
         Player player = event.getEntity();
-        ItemStack heldItem = player.getItemInHand(event.getHand());
+        ItemStack mainHand = player.getMainHandItem();
+        ItemStack offHand = player.getOffhandItem();
+        ItemStack heldItem = event.getItemStack();
 
         if (event.getTarget() instanceof LivingEntity target) {
             CompoundTag persistent = target.getPersistentData();
+            
+            // Verificar que sea un aliado leal de este jugador
+            if (!persistent.contains("PokeCraftFriendly")) return;
+            if (!player.getUUID().equals(persistent.getUUID("OwnerUUID"))) return;
 
-            // 1. RECUPERAR MOB CON MANO VACÍA (Únicamente el dueño) - Infinito y conserva el Tier exacto
-            if (heldItem.isEmpty() && persistent.contains("PokeCraftFriendly")) {
-                if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
-                    Item pokeballItem = PokeCraftMod.POKEBALL.get();
-                    if (persistent.contains("PokeballRegistryName")) {
-                        Item foundItem = BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(persistent.getString("PokeballRegistryName")));
-                        if (foundItem != null) {
-                            pokeballItem = foundItem;
-                        }
+            // 1. RECUPERAR AL MOB: Solo si el jugador está agachado (Shift + Clic derecho)
+            if (player.isShiftKeyDown()) {
+                Item pokeballItem = PokeCraftMod.POKEBALL.get();
+                if (persistent.contains("PokeballRegistryName")) {
+                    Item foundItem = BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(persistent.getString("PokeballRegistryName")));
+                    if (foundItem != null) {
+                        pokeballItem = foundItem;
                     }
+                }
 
-                    ItemStack filledPokeball = new ItemStack(pokeballItem);
-                    CompoundTag entityTag = new CompoundTag();
-                    target.save(entityTag);
-                    entityTag.remove("UUID");
-                    
-                    CompoundTag tag = filledPokeball.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
-                    tag.put("CapturedEntity", entityTag);
-                    filledPokeball.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+                ItemStack filledPokeball = new ItemStack(pokeballItem);
+                CompoundTag entityTag = new CompoundTag();
+                target.save(entityTag);
+                entityTag.remove("UUID");
+                
+                CompoundTag tag = filledPokeball.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+                tag.put("CapturedEntity", entityTag);
+                filledPokeball.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
 
-                    if (target.hasCustomName()) {
-                        filledPokeball.set(DataComponents.CUSTOM_NAME, target.getCustomName());
-                    }
+                if (target.hasCustomName()) {
+                    filledPokeball.set(DataComponents.CUSTOM_NAME, target.getCustomName());
+                }
 
-                    if (!player.addItem(filledPokeball)) {
-                        player.drop(filledPokeball, false);
-                    }
+                if (!player.addItem(filledPokeball)) {
+                    player.drop(filledPokeball, false);
+                }
 
-                    event.getLevel().playSound(null, target.blockPosition(), SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 1.0f, 1.0f);
-                    target.discard();
+                event.getLevel().playSound(null, target.blockPosition(), SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 1.0f, 1.0f);
+                target.discard();
 
+                event.setCancellationResult(InteractionResult.SUCCESS);
+                event.setCanceled(true);
+                return;
+            }
+
+            // 2. DAR ÓRDENES TÁCTICAS CON EL PALO (Mano principal o secundaria)
+            boolean mainHasStick = mainHand.is(Items.STICK);
+            boolean offHasStick = offHand.is(Items.STICK);
+
+            if (mainHasStick || offHasStick) {
+                // Si ambas manos tienen palo, evitamos la duplicación procesando únicamente en MAIN_HAND
+                if (mainHasStick && offHasStick && event.getHand() != InteractionHand.MAIN_HAND) {
                     event.setCancellationResult(InteractionResult.SUCCESS);
                     event.setCanceled(true);
                     return;
                 }
-            }
 
-            // 2. DAR ÓRDENES TÁCTICAS EXCLUSIVAMENTE CON EL PALO
-            if (heldItem.is(Items.STICK) && persistent.contains("PokeCraftFriendly")) {
-                if (player.getUUID().equals(persistent.getUUID("OwnerUUID"))) {
-                    int state = persistent.getInt("MobOrderState");
-                    state = (state + 1) % 3;
-                    persistent.putInt("MobOrderState", state);
-
-                    String stateStr = switch (state) {
-                        case 0 -> "siguiendo";
-                        case 1 -> "quieto";
-                        case 2 -> "protegiendo";
-                        default -> "siguiendo";
-                    };
-
-                    Component mobName = target.hasCustomName() ? target.getCustomName() : target.getDisplayName();
-                    Component message = Component.literal("[").append(mobName).append("] ahora está " + stateStr);
-                    
-                    player.displayClientMessage(message, true);
-
-                    event.getLevel().playSound(null, target.blockPosition(), SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.8f, 1.2f);
-                    event.setCancellationResult(InteractionResult.SUCCESS);
-                    event.setCanceled(true);
-                    return;
+                // Si solo la mano secundaria tiene palo, procesamos cuando el evento provenga de OFF_HAND
+                if (!mainHasStick && offHasStick && event.getHand() != InteractionHand.OFF_HAND) {
+                    return; // Dejar que pase al evento de offhand
                 }
+
+                int state = persistent.getInt("MobOrderState");
+                state = (state + 1) % 3;
+                persistent.putInt("MobOrderState", state);
+
+                String stateStr = switch (state) {
+                    case 0 -> "siguiendo";
+                    case 1 -> "quieto";
+                    case 2 -> "protegiendo";
+                    default -> "siguiendo";
+                };
+
+                Component mobName = target.hasCustomName() ? target.getCustomName() : target.getDisplayName();
+                Component message = Component.literal("[").append(mobName).append("] ahora está " + stateStr);
+                
+                player.displayClientMessage(message, true);
+
+                event.getLevel().playSound(null, target.blockPosition(), SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.8f, 1.2f);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+                event.setCanceled(true);
+                return;
             }
 
-            // 3. CURAR AL MOB CON COMIDA
+            // 3. CURAR AL MOB CON COMIDA (si sostiene comida válida)
             FoodProperties food = heldItem.getFoodProperties(target);
-            if (food != null && target.getHealth() < target.getMaxHealth() && persistent.contains("PokeCraftFriendly")) {
+            if (food != null && target.getHealth() < target.getMaxHealth()) {
                 target.heal(food.nutrition() * 2);
                 if (!player.getAbilities().instabuild) {
                     heldItem.shrink(1);
@@ -111,7 +129,12 @@ public class ModEventHandlers {
                 event.getLevel().playSound(null, target.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 1.0f, 1.0f);
                 event.setCancellationResult(InteractionResult.SUCCESS);
                 event.setCanceled(true);
+                return;
             }
+
+            // 4. SI NO TIENE PALO, NO SE DA SHIFT Y NO ES COMIDA -> NO SUCEDE NADA
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            event.setCanceled(true);
         }
     }
 
