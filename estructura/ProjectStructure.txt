@@ -1,0 +1,265 @@
+tree "D:\Archivos\Documentos\GitHub\PokeCraft" /F
+
+El número de serie del volumen es 5246-36F4
+D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
+│   .gitattributes
+│   .gitignore
+│   build.gradle
+│   copia.py
+│   gradle.properties
+│   gradlew
+│   gradlew.bat
+│   README.md
+│   settings.gradle
+│   TEMPLATE_LICENSE.txt
+│
+├───.github
+│   └───workflows
+│           build.yml
+│
+├───.gradle
+│   │   file-system.probe
+│   │
+│   ├───9.2.1
+│   │   │   gc.properties
+│   │   │
+│   │   ├───checksums
+│   │   │       checksums.lock
+│   │   │       md5-checksums.bin
+│   │   │       sha1-checksums.bin
+│   │   │
+│   │   ├───executionHistory
+│   │   │       executionHistory.bin
+│   │   │       executionHistory.lock
+│   │   │
+│   │   ├───expanded
+│   │   │       expanded.lock
+│   │   │
+│   │   ├───fileChanges
+│   │   │       last-build.bin
+│   │   │
+│   │   ├───fileHashes
+│   │   │       fileHashes.bin
+│   │   │       fileHashes.lock
+│   │   │       resourceHashesCache.bin
+│   │   │
+│   │   └───vcsMetadata
+│   ├───buildOutputCleanup
+│   │       buildOutputCleanup.lock
+│   │       cache.properties
+│   │       outputFiles.bin
+│   │
+│   ├───configuration-cache
+│   │   │   configuration-cache.lock
+│   │   │   gc.properties
+│   │   │
+│   │   ├───5q828ghtetg4ihp988dwwsqw3
+│   │   │       candidates.bin
+│   │   │
+│   │   ├───83e39e28-64c2-49b8-893d-434020b81917
+│   │   │       .globals.work.bin
+│   │   │       .strings.work.bin
+│   │   │       build.work.bin
+│   │   │       buildfingerprint.bin
+│   │   │       classloaderscopes.bin
+│   │   │       entry.bin
+│   │   │       projectfingerprint.bin
+│   │   │       work.bin
+│   │   │       _.work.bin
+│   │   │
+│   │   ├───dbd49c60-e15d-4b80-ab19-1865e9e1ac03
+│   │   ├───edlqdfq4ho6n4dtfcc9dk81l2
+│   │   │       candidates.bin
+│   │   │
+│   │   ├───f47ec323-9c54-4d80-91d0-cf4f2f090e66
+│   │   │       .globals.work.bin
+│   │   │       .strings.work.bin
+│   │   │       buildfingerprint.bin
+│   │   │       classloaderscopes.bin
+│   │   │       entry.bin
+│   │   │       projectfingerprint.bin
+│   │   │       work.bin
+│   │   │       _.work.bin
+│   │   │
+│   │   └───fde7da8f-be3c-47c3-8d82-062db0a2a622
+│   └───vcs-1
+│           gc.properties
+│
+├───.vscode
+│       launch.json
+│
+├───block
+│   └───entity
+│       └───event
+├───build
+│   ├───classes
+│   │   └───java
+│   │       └───main
+│   │           └───com
+│   │               └───jose
+│   │                   └───pokecraft
+│   │                       │   PokeCraftMod.class
+│   │                       │
+│   │                       ├───block
+│   │                       │       MobJarBlock.class
+│   │                       │       MobJarBlockEntity.class
+│   │                       │
+│   │                       ├───client
+│   │                       │   └───renderer
+│   │                       │           MobJarRenderer.class
+│   │                       │
+│   │                       ├───entity
+│   │                       │       PokeballProjectileEntity.class
+│   │                       │
+│   │                       ├───event
+│   │                       │       ClientModEvents.class
+│   │                       │       ModEventHandlers.class
+│   │                       │
+│   │                       └───item
+│   │                               PokeballItem$Tier.class
+│   │                               PokeballItem.class
+│   │                               QuiverItem$1.class
+│   │                               QuiverItem.class
+│   │
+│   ├───generated
+│   │   └───sources
+│   │       ├───annotationProcessor
+│   │       │   └───java
+│   │       │       └───main
+│   │       ├───headers
+│   │       │   └───java
+│   │       │       └───main
+│   │       └───modMetadata
+│   │           └───META-INF
+│   │                   neoforge.mods.toml
+│   │
+│   ├───libs
+│   │       pokecraft-1.0.0.jar
+│   │
+│   ├───moddev
+│   │   └───artifacts
+│   │           neoforge-21.1.262-client-extra-aka-minecraft-resources.jar
+│   │           neoforge-21.1.262-merged.jar
+│   │           neoforge-21.1.262-sources.jar
+│   │           neoforge-21.1.262.jar
+│   │
+│   ├───reports
+│   │   └───problems
+│   │           problems-report.html
+│   │
+│   ├───resources
+│   │   └───main
+│   │       ├───assets
+│   │       │   └───pokecraft
+│   │       │       ├───blockstates
+│   │       │       │       mob_jar.json
+│   │       │       │
+│   │       │       └───models
+│   │       │           ├───block
+│   │       │           │       mob_jar.json
+│   │       │           │
+│   │       │           └───item
+│   │       │                   mob_jar.json
+│   │       │                   pokeball.json
+│   │       │
+│   │       ├───data
+│   │       │   └───pokecraft
+│   │       │       └───recipes
+│   │       │               greatball.json
+│   │       │               masterball.json
+│   │       │               mob_jar.json
+│   │       │               pokeball.json
+│   │       │               quiver.json
+│   │       │               superball.json
+│   │       │               ultraball.json
+│   │       │
+│   │       └───META-INF
+│   │               mods.toml
+│   │               neoforge.mods.toml
+│   │
+│   └───tmp
+│       ├───compileJava
+│       │       previous-compilation-data.bin
+│       │
+│       ├───createMinecraftArtifacts
+│       │       nfrt-problem-report.json
+│       │       nfrt_artifact_manifest.properties
+│       │
+│       ├───jar
+│       │       MANIFEST.MF
+│       │
+│       └───neoformruntime
+│           ├───20261028-001935_downloadClient
+│           ├───20261028-001935_downloadClientMappings
+│           ├───20261028-001935_downloadJson
+│           └───20261028-001935_downloadServer
+├───estructura
+│       ProjectStructure.txt
+│
+├───gradle
+│   └───wrapper
+│           gradle-wrapper.jar
+│           gradle-wrapper.properties
+│
+└───src
+    └───main
+        ├───java
+        │   └───com
+        │       └───jose
+        │           └───pokecraft
+        │               │   PokeCraftMod.java
+        │               │
+        │               ├───block
+        │               │       MobJarBlock.java
+        │               │       MobJarBlockEntity.java
+        │               │
+        │               ├───client
+        │               │   └───renderer
+        │               │           MobJarRenderer.java
+        │               │
+        │               ├───entity
+        │               │       PokeballProjectileEntity.java
+        │               │
+        │               ├───event
+        │               │       ClientModEvents.java
+        │               │       ModEventHandlers.java
+        │               │
+        │               ├───item
+        │               │       PokeballItem.java
+        │               │       QuiverItem.java
+        │               │
+        │               └───lang
+        │                       en_us.json
+        │                       es_es.json
+        │
+        ├───resources
+        │   ├───assets
+        │   │   └───pokecraft
+        │   │       ├───blockstates
+        │   │       │       mob_jar.json
+        │   │       │
+        │   │       └───models
+        │   │           ├───block
+        │   │           │       mob_jar.json
+        │   │           │
+        │   │           └───item
+        │   │                   mob_jar.json
+        │   │                   pokeball.json
+        │   │
+        │   ├───data
+        │   │   └───pokecraft
+        │   │       └───recipes
+        │   │               greatball.json
+        │   │               masterball.json
+        │   │               mob_jar.json
+        │   │               pokeball.json
+        │   │               quiver.json
+        │   │               superball.json
+        │   │               ultraball.json
+        │   │
+        │   └───META-INF
+        │           mods.toml
+        │
+        └───templates
+            └───META-INF
+                    neoforge.mods.toml
