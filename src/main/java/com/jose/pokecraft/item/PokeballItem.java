@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -17,8 +18,12 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 public class PokeballItem extends Item {
     public enum Tier { POKEBALL, GREATBALL, SUPERBALL, ULTRABALL, MASTERBALL }
@@ -56,6 +61,45 @@ public class PokeballItem extends Item {
         }
 
         return InteractionResultHolder.sidedSuccess(itemstack, level.isClientSide());
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
+        super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
+
+        // Descripciones y multiplicadores según el Tier de la Poké Ball
+        switch (tier) {
+            case POKEBALL -> {
+                tooltipComponents.add(Component.literal("§7Tier: Poké Ball Básica"));
+                tooltipComponents.add(Component.literal("§eProbabilidad: Basada en la vida faltante (0% a 50%)."));
+            }
+            case GREATBALL -> {
+                tooltipComponents.add(Component.literal("§7Tier: Great Ball"));
+                tooltipComponents.add(Component.literal("§eProbabilidad: +15% extra de captura base."));
+            }
+            case SUPERBALL -> {
+                tooltipComponents.add(Component.literal("§7Tier: Super Ball"));
+                tooltipComponents.add(Component.literal("§eProbabilidad: +30% extra de captura base."));
+            }
+            case ULTRABALL -> {
+                tooltipComponents.add(Component.literal("§7Tier: Ultra Ball"));
+                tooltipComponents.add(Component.literal("§eProbabilidad: +50% extra de captura base."));
+            }
+            case MASTERBALL -> {
+                tooltipComponents.add(Component.literal("§6Tier: Master Ball"));
+                tooltipComponents.add(Component.literal("§bCaptura instantánea del 100%."));
+            }
+        }
+
+        // Muestra el mob que contiene adentro si está llena
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        if (customData != null && customData.copyTag().contains("CapturedEntity")) {
+            CompoundTag entityTag = customData.copyTag().getCompound("CapturedEntity");
+            if (entityTag.contains("id")) {
+                String entityId = entityTag.getString("id");
+                tooltipComponents.add(Component.literal("§aContiene: §f" + entityId));
+            }
+        }
     }
 
     public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack thrownStack) {
