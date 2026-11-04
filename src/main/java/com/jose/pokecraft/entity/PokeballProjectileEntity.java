@@ -38,26 +38,39 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
 
     @Override
     protected void onHitEntity(EntityHitResult result) {
-        super.onHitEntity(result);
-        if (this.level().isClientSide) return;
+        if (this.level().isClientSide) {
+            return;
+        }
 
         ItemStack stack = this.getItem();
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         CompoundTag tag = customData != null ? customData.copyTag() : null;
         
-        Player player = (Player) this.getOwner();
+        Player player = this.getOwner() instanceof Player p ? p : null;
 
         if (tag != null && tag.contains("CapturedEntity")) {
             CompoundTag entityTag = tag.getCompound("CapturedEntity");
             PokeballItem.releaseEntity((ServerLevel) this.level(), entityTag, this.blockPosition(), player);
             this.discard();
         } else if (result.getEntity() instanceof LivingEntity target) {
-            boolean wasSuccessful = PokeballItem.attemptCatch(target, player, tier, stack);
-            if (wasSuccessful) {
-                this.discard();
-            } else {
+            // EVITAR ESTRICTAMENTE CAPTURAR JUGADORES
+            if (target instanceof Player) {
                 handleEmptyBreakOrDrop(stack);
+                return;
             }
+
+            // Intentar captura
+            if (player != null) {
+                boolean wasSuccessful = PokeballItem.attemptCatch(target, player, tier, stack);
+                if (wasSuccessful) {
+                    this.discard();
+                    return;
+                }
+            }
+            
+            // IMPORTANTE: Al omitir super.onHitEntity(...), evitamos que mobs con 
+            // física de rebote o defensas contra proyectiles (como el Breeze) devuelvan la Poké Ball.
+            handleEmptyBreakOrDrop(stack);
         }
     }
 
@@ -70,7 +83,7 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         CompoundTag tag = customData != null ? customData.copyTag() : null;
         
-        Player player = (Player) this.getOwner();
+        Player player = this.getOwner() instanceof Player p ? p : null;
 
         if (tag != null && tag.contains("CapturedEntity")) {
             CompoundTag entityTag = tag.getCompound("CapturedEntity");

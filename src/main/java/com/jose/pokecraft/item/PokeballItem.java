@@ -16,7 +16,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.NeutralMob;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.animal.WaterAnimal;
@@ -72,36 +71,46 @@ public class PokeballItem extends Item {
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
         super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
 
-        // Descripciones y multiplicadores según el Tier de la Poké Ball
         switch (tier) {
             case POKEBALL -> {
-                tooltipComponents.add(Component.literal("§7Tier: Poké Ball Básica"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: Pasivos (100%), Hostiles (Vida faltante), Neutrales (+20%)."));
+                tooltipComponents.add(Component.literal("§7Tier: Poké Ball Básica (Bonus: 1.0x)"));
+                tooltipComponents.add(Component.literal("§8-----------------"));
+                tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
+                tooltipComponents.add(Component.literal("§e• Neutrales: §fFórmula + 20% extra."));
+                tooltipComponents.add(Component.literal("§c• Hostiles: §fFórmula basada en HP max/actual."));
             }
             case GREATBALL -> {
-                tooltipComponents.add(Component.literal("§7Tier: Great Ball"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: +15% extra de captura base en hostiles/neutrales."));
+                tooltipComponents.add(Component.literal("§7Tier: Great Ball (Bonus: 1.3x)"));
+                tooltipComponents.add(Component.literal("§8-----------------"));
+                tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.3x + Efecto Negativo."));
             }
             case SUPERBALL -> {
-                tooltipComponents.add(Component.literal("§7Tier: Super Ball"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: +30% extra de captura base en hostiles/neutrales."));
+                tooltipComponents.add(Component.literal("§7Tier: Super Ball (Bonus: 1.6x)"));
+                tooltipComponents.add(Component.literal("§8-----------------"));
+                tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.6x + Efecto Negativo."));
             }
             case ULTRABALL -> {
-                tooltipComponents.add(Component.literal("§7Tier: Ultra Ball"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: +50% extra de captura base en hostiles/neutrales."));
+                tooltipComponents.add(Component.literal("§7Tier: Ultra Ball (Bonus: 2.0x)"));
+                tooltipComponents.add(Component.literal("§8-----------------"));
+                tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 2.0x + Efecto Negativo."));
             }
             case MASTERBALL -> {
                 tooltipComponents.add(Component.literal("§6Tier: Master Ball"));
-                tooltipComponents.add(Component.literal("§bCaptura instantánea del 100%."));
+                tooltipComponents.add(Component.literal("§8-----------------"));
+                tooltipComponents.add(Component.literal("§b• Todos los Mobs: §fCaptura instantánea del 100%."));
+                tooltipComponents.add(Component.literal("§b• Jefes / Ender Dragon: §fSin restricciones."));
             }
         }
 
-        // Muestra el mob que contiene adentro de forma garantizada
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         if (customData != null && customData.copyTag().contains("CapturedEntity")) {
             CompoundTag entityTag = customData.copyTag().getCompound("CapturedEntity");
             if (entityTag.contains("id")) {
                 String entityId = entityTag.getString("id");
+                tooltipComponents.add(Component.literal("§8-----------------"));
                 tooltipComponents.add(Component.literal("§aContiene: §f" + entityId));
             }
         }
@@ -110,39 +119,49 @@ public class PokeballItem extends Item {
     public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack thrownStack) {
         if (target.level().isClientSide()) return false;
 
+        // BINDING: Nunca permitir capturar jugadores
+        if (target instanceof Player) {
+            return false;
+        }
+
         boolean isEnderDragon = target.getType() == EntityType.ENDER_DRAGON;
         if (tier == Tier.MASTERBALL || isEnderDragon) {
             return executeCatch(target, player, thrownStack);
         }
 
-        // 1. Mobs Pasivos: Tienen 100% de probabilidad independiente del tipo de bola
         boolean isPassive = (target instanceof Animal || target instanceof Villager || target instanceof WaterAnimal) 
                 && !(target instanceof NeutralMob);
         if (isPassive) {
             return executeCatch(target, player, thrownStack);
         }
 
-        float maxHealth = target.getMaxHealth();
-        float currentHealth = target.getHealth();
-        float healthPercent = currentHealth / maxHealth;
+        float hpMax = target.getMaxHealth();
+        float hpCurrent = target.getHealth();
+        if (hpMax <= 0.0f) hpMax = 1.0f;
 
-        // Cálculo base para hostiles basado en vida faltante
-        float catchRate = (1.0f - healthPercent) * 0.5f;
+        float ballBonus = switch (tier) {
+            case POKEBALL -> 1.0f;
+            case GREATBALL -> 1.3f;
+            case SUPERBALL -> 1.6f;
+            case ULTRABALL -> 2.0f;
+            case MASTERBALL -> 10.0f;
+        };
 
-        // 2. Mobs Neutrales: Aumentan un 20% (+0.20) la probabilidad base
+        boolean hasNegativeEffect = target.getActiveEffects().stream()
+                .anyMatch(effect -> !effect.getEffect().value().isBeneficial());
+        float statusBonus = hasNegativeEffect ? 1.25f : 1.0f;
+
         boolean isNeutral = target instanceof NeutralMob;
-        if (isNeutral) {
-            catchRate += 0.20f;
+        float mobType = isNeutral ? 0.20f : 0.0f;
+
+        float catchRate;
+        if (hpMax >= 20.0f) {
+            catchRate = ((3.0f * hpMax - 2.0f * hpCurrent) / (3.0f * hpMax)) * (20.0f / hpMax) * ballBonus * statusBonus + mobType;
+        } else {
+            catchRate = ((5.0f * hpMax - hpCurrent) / (5.0f * hpMax)) * ballBonus * statusBonus + mobType;
         }
 
-        // 3. Bonificador por Tier de Poké Ball (aplica para Hostiles y Neutrales)
-        switch (tier) {
-            case GREATBALL -> catchRate += 0.15f;
-            case SUPERBALL -> catchRate += 0.30f;
-            case ULTRABALL -> catchRate += 0.50f;
-            case MASTERBALL -> catchRate = 1.0f;
-            default -> {}
-        }
+        catchRate = Math.clamp(catchRate, 0.0f, 1.0f);
 
         if (target.level().getRandom().nextFloat() <= catchRate) {
             return executeCatch(target, player, thrownStack);
@@ -155,10 +174,7 @@ public class PokeballItem extends Item {
         CompoundTag entityTag = new CompoundTag();
         target.save(entityTag);
 
-        // Guardar explícitamente el ID del tipo de entidad para que el tooltip lo lea correctamente
         entityTag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).toString());
-
-        // Guardar el registro del item exacto de la Poké Ball en los datos de la entidad
         entityTag.putString("PokeballRegistryName", BuiltInRegistries.ITEM.getKey(thrownStack.getItem()).toString());
 
         ItemStack filledStack = new ItemStack(thrownStack.getItem());
