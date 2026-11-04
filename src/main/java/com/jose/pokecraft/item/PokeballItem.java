@@ -14,8 +14,13 @@ import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.NeutralMob;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.animal.WaterAnimal;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
@@ -71,19 +76,19 @@ public class PokeballItem extends Item {
         switch (tier) {
             case POKEBALL -> {
                 tooltipComponents.add(Component.literal("§7Tier: Poké Ball Básica"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: Basada en la vida faltante (0% a 50%)."));
+                tooltipComponents.add(Component.literal("§eProbabilidad: Pasivos (100%), Hostiles (Vida faltante), Neutrales (+20%)."));
             }
             case GREATBALL -> {
                 tooltipComponents.add(Component.literal("§7Tier: Great Ball"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: +15% extra de captura base."));
+                tooltipComponents.add(Component.literal("§eProbabilidad: +15% extra de captura base en hostiles/neutrales."));
             }
             case SUPERBALL -> {
                 tooltipComponents.add(Component.literal("§7Tier: Super Ball"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: +30% extra de captura base."));
+                tooltipComponents.add(Component.literal("§eProbabilidad: +30% extra de captura base en hostiles/neutrales."));
             }
             case ULTRABALL -> {
                 tooltipComponents.add(Component.literal("§7Tier: Ultra Ball"));
-                tooltipComponents.add(Component.literal("§eProbabilidad: +50% extra de captura base."));
+                tooltipComponents.add(Component.literal("§eProbabilidad: +50% extra de captura base en hostiles/neutrales."));
             }
             case MASTERBALL -> {
                 tooltipComponents.add(Component.literal("§6Tier: Master Ball"));
@@ -91,7 +96,7 @@ public class PokeballItem extends Item {
             }
         }
 
-        // Muestra el mob que contiene adentro si está llena
+        // Muestra el mob que contiene adentro de forma garantizada
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         if (customData != null && customData.copyTag().contains("CapturedEntity")) {
             CompoundTag entityTag = customData.copyTag().getCompound("CapturedEntity");
@@ -106,7 +111,14 @@ public class PokeballItem extends Item {
         if (target.level().isClientSide()) return false;
 
         boolean isEnderDragon = target.getType() == EntityType.ENDER_DRAGON;
-        if (tier == Tier.MASTERBALL || (isEnderDragon && tier == Tier.MASTERBALL)) {
+        if (tier == Tier.MASTERBALL || isEnderDragon) {
+            return executeCatch(target, player, thrownStack);
+        }
+
+        // 1. Mobs Pasivos: Tienen 100% de probabilidad independiente del tipo de bola
+        boolean isPassive = (target instanceof Animal || target instanceof Villager || target instanceof WaterAnimal) 
+                && !(target instanceof NeutralMob);
+        if (isPassive) {
             return executeCatch(target, player, thrownStack);
         }
 
@@ -114,8 +126,16 @@ public class PokeballItem extends Item {
         float currentHealth = target.getHealth();
         float healthPercent = currentHealth / maxHealth;
 
+        // Cálculo base para hostiles basado en vida faltante
         float catchRate = (1.0f - healthPercent) * 0.5f;
-        
+
+        // 2. Mobs Neutrales: Aumentan un 20% (+0.20) la probabilidad base
+        boolean isNeutral = target instanceof NeutralMob;
+        if (isNeutral) {
+            catchRate += 0.20f;
+        }
+
+        // 3. Bonificador por Tier de Poké Ball (aplica para Hostiles y Neutrales)
         switch (tier) {
             case GREATBALL -> catchRate += 0.15f;
             case SUPERBALL -> catchRate += 0.30f;
@@ -134,6 +154,9 @@ public class PokeballItem extends Item {
     private static boolean executeCatch(LivingEntity target, Player player, ItemStack thrownStack) {
         CompoundTag entityTag = new CompoundTag();
         target.save(entityTag);
+
+        // Guardar explícitamente el ID del tipo de entidad para que el tooltip lo lea correctamente
+        entityTag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).toString());
 
         // Guardar el registro del item exacto de la Poké Ball en los datos de la entidad
         entityTag.putString("PokeballRegistryName", BuiltInRegistries.ITEM.getKey(thrownStack.getItem()).toString());
