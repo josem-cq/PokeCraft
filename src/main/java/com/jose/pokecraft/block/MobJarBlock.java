@@ -11,6 +11,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -65,6 +66,25 @@ public class MobJarBlock extends BaseEntityBlock {
     }
 
     @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (!level.isClientSide && level.getBlockEntity(pos) instanceof MobJarBlockEntity jarBE) {
+            CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+            if (customData != null) {
+                CompoundTag tag = customData.copyTag();
+                if (tag.contains("CapturedEntity")) {
+                    jarBE.setStoredEntityTag(tag.getCompound("CapturedEntity"));
+                } else if (tag.contains("id")) {
+                    jarBE.setStoredEntityTag(tag);
+                }
+            }
+            if (stack.has(DataComponents.CUSTOM_NAME)) {
+                jarBE.setCustomName(stack.get(DataComponents.CUSTOM_NAME));
+            }
+        }
+    }
+
+    @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
         if (level.isClientSide) return InteractionResult.SUCCESS;
 
@@ -91,8 +111,8 @@ public class MobJarBlock extends BaseEntityBlock {
                 }
             }
 
-            // 2. Extraer mob si tiene entidad y la mano está vacía
-            if (jarBE.hasStoredEntity() && heldItem.isEmpty()) {
+            // 2. Extraer mob si tiene entidad y la mano está vacía (con Shift)
+            if (jarBE.hasStoredEntity() && player.isShiftKeyDown() && heldItem.isEmpty()) {
                 CompoundTag entityTag = jarBE.getStoredEntityTag();
                 
                 Item pokeballItem = com.jose.pokecraft.PokeCraftMod.POKEBALL.get();
@@ -128,15 +148,21 @@ public class MobJarBlock extends BaseEntityBlock {
 
     @Override
     public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
-        if (!level.isClientSide && !player.getAbilities().instabuild) {
+        if (!level.isClientSide) {
             BlockEntity be = level.getBlockEntity(pos);
-            if (be instanceof MobJarBlockEntity jarBe && jarBe.hasStoredEntity()) {
+            if (be instanceof MobJarBlockEntity jarBe) {
                 ItemStack jarStack = new ItemStack(this);
-                jarStack.set(DataComponents.CUSTOM_DATA, CustomData.of(jarBe.getStoredEntityTag()));
+                if (jarBe.hasStoredEntity()) {
+                    CompoundTag tag = new CompoundTag();
+                    tag.put("CapturedEntity", jarBe.getStoredEntityTag());
+                    jarStack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+                }
                 if (jarBe.hasCustomName()) {
                     jarStack.set(DataComponents.CUSTOM_NAME, jarBe.getCustomName());
                 }
-                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), jarStack);
+                if (!player.getAbilities().instabuild) {
+                    Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), jarStack);
+                }
             }
         }
         return super.playerWillDestroy(level, pos, state, player);
@@ -146,7 +172,9 @@ public class MobJarBlock extends BaseEntityBlock {
     public ItemStack getCloneItemStack(net.minecraft.world.level.LevelReader level, BlockPos pos, BlockState state) {
         ItemStack stack = super.getCloneItemStack(level, pos, state);
         if (level.getBlockEntity(pos) instanceof MobJarBlockEntity jarBe && jarBe.hasStoredEntity()) {
-            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(jarBe.getStoredEntityTag()));
+            CompoundTag tag = new CompoundTag();
+            tag.put("CapturedEntity", jarBe.getStoredEntityTag());
+            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
             if (jarBe.hasCustomName()) {
                 stack.set(DataComponents.CUSTOM_NAME, jarBe.getCustomName());
             }

@@ -10,7 +10,6 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
@@ -27,19 +26,18 @@ public class MobJarRenderer implements BlockEntityRenderer<MobJarBlockEntity> {
             // 1. Centrar y posicionar en la base del tarro
             poseStack.translate(0.5D, 0.1D, 0.5D);
 
-            // 2. Aplicar rotación direccional según HORIZONTAL_FACING del bloque
+            // 2. Aplicar rotación direccional basada en HORIZONTAL_FACING del bloque
             BlockState blockState = blockEntity.getBlockState();
             if (blockState.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
                 Direction facing = blockState.getValue(BlockStateProperties.HORIZONTAL_FACING);
-                // Rotar el modelo para que coincida con la orientación del tarro
                 poseStack.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
             }
-            
+
             // 3. Escalar ajustado al tamaño del tarro
             float scale = blockEntity.getScale();
             poseStack.scale(scale, scale, scale);
 
-            // Congelar rotaciones y posiciones anteriores para evitar temblores
+            // Congelar rotaciones y posiciones para evitar temblores
             entity.setXRot(0.0F);
             entity.setYRot(0.0F);
             entity.xRotO = 0.0F;
@@ -63,7 +61,7 @@ public class MobJarRenderer implements BlockEntityRenderer<MobJarBlockEntity> {
 
             Minecraft.getInstance().getEntityRenderDispatcher().render(
                 entity, 
-                0.D, 0.0D, 0.0D, 
+                0.0D, 0.0D, 0.0D, 
                 0.0F, 
                 0.0F, 
                 poseStack, 

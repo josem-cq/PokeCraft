@@ -45,6 +45,10 @@ public class MobJarBlockEntity extends BlockEntity {
                 this.customName = Component.Serializer.fromJson(tag.getString("CustomName"), registries);
             } catch (Exception ignored) {}
         }
+        // Restaurar si el bloque se coloca desde un ítem con CustomData
+        if (!tag.contains("StoredEntity") && tag.contains("CustomData")) {
+            // Manejo de compatibilidad con CustomData de ItemStack al colocar bloque
+        }
     }
 
     public boolean hasStoredEntity() {

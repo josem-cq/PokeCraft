@@ -119,8 +119,8 @@ public class PokeballItem extends Item {
     public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack thrownStack) {
         if (target.level().isClientSide()) return false;
 
-        // BINDING: Nunca permitir capturar jugadores
-        if (target instanceof Player) {
+        // BINDING: Nunca permitir capturar jugadores ni Soportes de Armadura (ArmorStand)
+        if (target instanceof Player || target instanceof net.minecraft.world.entity.decoration.ArmorStand) {
             return false;
         }
 
