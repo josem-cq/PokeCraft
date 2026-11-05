@@ -5,7 +5,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -15,6 +18,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.NeutralMob;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.animal.Animal;
@@ -108,10 +113,110 @@ public class PokeballItem extends Item {
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         if (customData != null && customData.copyTag().contains("CapturedEntity")) {
             CompoundTag entityTag = customData.copyTag().getCompound("CapturedEntity");
-            if (entityTag.contains("id")) {
-                String entityId = entityTag.getString("id");
-                tooltipComponents.add(Component.literal("§8-----------------"));
-                tooltipComponents.add(Component.literal("§aContiene: §f" + entityId));
+            tooltipComponents.add(Component.literal("§8-----------------"));
+
+            // 1. Nombre legible del mob (sin tags crudos) o nombre personalizado
+            Component mobName = Component.literal("Desconocido");
+            EntityType<?> rawType = null;
+
+            if (entityTag.contains("CustomName", 8)) {
+                try {
+                    mobName = Component.Serializer.fromJson(entityTag.getString("CustomName"), context.registries());
+                } catch (Exception e) {
+                    mobName = Component.literal(entityTag.getString("CustomName"));
+                }
+            }
+            if (entityTag.contains("id", 8)) {
+                ResourceLocation loc = ResourceLocation.tryParse(entityTag.getString("id"));
+                if (loc != null) {
+                    rawType = BuiltInRegistries.ENTITY_TYPE.get(loc);
+                    if (rawType != null && !entityTag.contains("CustomName", 8)) {
+                        mobName = rawType.getDescription();
+                    }
+                }
+            }
+            
+            MutableComponent header = Component.literal("§aContiene: §f").append(mobName);
+            tooltipComponents.add(header);
+
+            // 2. Salud actual / Salud total real del mob
+            float health = entityTag.contains("Health", 99) ? entityTag.getFloat("Health") : 20f;
+            float maxHealth = 20f;
+
+            if (rawType != null) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    EntityType<? extends LivingEntity> livingType = (EntityType<? extends LivingEntity>) rawType;
+                    if (DefaultAttributes.hasSupplier(livingType)) {
+                        maxHealth = (float) DefaultAttributes.getSupplier(livingType).getValue(Attributes.MAX_HEALTH);
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (entityTag.contains("Attributes", 9) || entityTag.contains("attributes", 9)) {
+                ListTag attributesList = entityTag.contains("Attributes", 9) ? entityTag.getList("Attributes", 10) : entityTag.getList("attributes", 10);
+                for (int i = 0; i < attributesList.size(); i++) {
+                    CompoundTag attrTag = attributesList.getCompound(i);
+                    String attrId = attrTag.getString("id");
+                    if ("minecraft:generic.max_health".equals(attrId) || "generic.max_health".equals(attrId)) {
+                        if (attrTag.contains("base", 99)) {
+                            maxHealth = attrTag.getFloat("base");
+                        }
+                    }
+                }
+            }
+            tooltipComponents.add(Component.literal("§7Salud: §f" + (int)Math.ceil(health) + " / " + (int)Math.ceil(maxHealth) + " §c❤"));
+
+            // 3. Armadura (natural por atributos o equipamiento)
+            float armor = 0f;
+            if (rawType != null) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    EntityType<? extends LivingEntity> livingType = (EntityType<? extends LivingEntity>) rawType;
+                    if (DefaultAttributes.hasSupplier(livingType)) {
+                        armor = (float) DefaultAttributes.getSupplier(livingType).getValue(Attributes.ARMOR);
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (entityTag.contains("Attributes", 9) || entityTag.contains("attributes", 9)) {
+                ListTag attributesList = entityTag.contains("Attributes", 9) ? entityTag.getList("Attributes", 10) : entityTag.getList("attributes", 10);
+                for (int i = 0; i < attributesList.size(); i++) {
+                    CompoundTag attrTag = attributesList.getCompound(i);
+                    String attrId = attrTag.getString("id");
+                    if ("minecraft:generic.armor".equals(attrId) || "generic.armor".equals(attrId)) {
+                        if (attrTag.contains("base", 99)) {
+                            armor = attrTag.getFloat("base");
+                        }
+                    }
+                }
+            }
+
+            if (armor > 0f) {
+                tooltipComponents.add(Component.literal("§7Armadura: §f" + (int)armor));
+            }
+
+            // 4. Efectos activos (compatible con "active_effects" y "ActiveEffects")
+            ListTag effectsList = null;
+            if (entityTag.contains("active_effects", 9)) {
+                effectsList = entityTag.getList("active_effects", 10);
+            } else if (entityTag.contains("ActiveEffects", 9)) {
+                effectsList = entityTag.getList("ActiveEffects", 10);
+            }
+
+            if (effectsList != null && !effectsList.isEmpty()) {
+                tooltipComponents.add(Component.literal("§7Efectos activos:"));
+                for (int i = 0; i < effectsList.size(); i++) {
+                    CompoundTag effectTag = effectsList.getCompound(i);
+                    String effectId = effectTag.getString("id");
+                    int amplifier = effectTag.contains("amplifier", 99) ? effectTag.getInt("amplifier") : 0;
+                    tooltipComponents.add(Component.literal(" §7- §f" + effectId + " (Nivel " + (amplifier + 1) + ")"));
+                }
+            }
+
+            // 5. Al final en gris el mod:mob que actualmente está almacenado
+            if (entityTag.contains("id", 8)) {
+                tooltipComponents.add(Component.literal("§7ID: " + entityTag.getString("id")));
             }
         }
     }

@@ -1,10 +1,11 @@
 {
   "type": "minecraft:crafting_shaped",
-  "pattern": ["BI ", "C I", " C "],
+  "pattern": ["BCR", "I C", " I "],
   "key": {
     "C": { "item": "minecraft:copper_ingot" },
     "I": { "item": "minecraft:iron_ingot" },
-    "B": { "tag": "minecraft:buttons" }
+    "B": { "tag": "minecraft:buttons" },
+    "R": { "item": "minecraft:redstone" }
   },
   "result": { "id": "pokecraft:pokeball", "count": 1 }
 }
