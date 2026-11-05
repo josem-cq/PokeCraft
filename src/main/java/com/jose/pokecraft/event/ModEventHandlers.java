@@ -133,8 +133,8 @@ public class ModEventHandlers {
             }
 
             // 4. SI NO TIENE PALO, NO SE DA SHIFT Y NO ES COMIDA -> NO SUCEDE NADA
-            event.setCancellationResult(InteractionResult.SUCCESS);
-            event.setCanceled(true);
+            //event.setCancellationResult(InteractionResult.SUCCESS);
+            //event.setCanceled(true);
         }
     }
 

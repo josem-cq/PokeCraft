@@ -3,6 +3,7 @@ package com.jose.pokecraft.block;
 import com.jose.pokecraft.item.PokeballItem;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -14,24 +15,42 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 
 public class MobJarBlock extends BaseEntityBlock {
+    public static final DirectionProperty HORIZONTAL_FACING = BlockStateProperties.HORIZONTAL_FACING;
     public static final MapCodec<MobJarBlock> CODEC = simpleCodec(MobJarBlock::new);
 
     public MobJarBlock(Properties properties) {
         super(properties);
+        this.registerDefaultState(this.stateDefinition.any().setValue(HORIZONTAL_FACING, Direction.NORTH));
     }
 
     @Override
     protected MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(HORIZONTAL_FACING);
+    }
+
+    @Nullable
+    @Override
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
+        return this.defaultBlockState().setValue(HORIZONTAL_FACING, context.getHorizontalDirection().getOpposite());
     }
 
     @Override
@@ -52,7 +71,7 @@ public class MobJarBlock extends BaseEntityBlock {
         if (level.getBlockEntity(pos) instanceof MobJarBlockEntity jarBE) {
             ItemStack heldItem = player.getItemInHand(player.getUsedItemHand());
 
-            // 1. Si el tarro está vacío y el jugador usa una Pokéball llena -> INSERTAR MOB AL TARRO
+            // 1. Insertar mob si está vacío y usa Pokéball
             if (!jarBE.hasStoredEntity() && heldItem.getItem() instanceof PokeballItem) {
                 CustomData customData = heldItem.get(DataComponents.CUSTOM_DATA);
                 if (customData != null && customData.copyTag().contains("CapturedEntity")) {
@@ -72,7 +91,7 @@ public class MobJarBlock extends BaseEntityBlock {
                 }
             }
 
-            // 2. Si el tarro tiene un mob y el jugador usa la MANO VACÍA -> EXTRAER MOB A UNA POKÉBALL
+            // 2. Extraer mob si tiene entidad y la mano está vacía
             if (jarBE.hasStoredEntity() && heldItem.isEmpty()) {
                 CompoundTag entityTag = jarBE.getStoredEntityTag();
                 

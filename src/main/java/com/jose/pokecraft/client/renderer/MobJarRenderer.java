@@ -2,12 +2,17 @@ package com.jose.pokecraft.client.renderer;
 
 import com.jose.pokecraft.block.MobJarBlockEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 public class MobJarRenderer implements BlockEntityRenderer<MobJarBlockEntity> {
     public MobJarRenderer(BlockEntityRendererProvider.Context context) {
@@ -19,14 +24,22 @@ public class MobJarRenderer implements BlockEntityRenderer<MobJarBlockEntity> {
         if (entity != null) {
             poseStack.pushPose();
             
-            // Centrar y posicionar en la base del tarro
+            // 1. Centrar y posicionar en la base del tarro
             poseStack.translate(0.5D, 0.1D, 0.5D);
+
+            // 2. Aplicar rotación direccional según HORIZONTAL_FACING del bloque
+            BlockState blockState = blockEntity.getBlockState();
+            if (blockState.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+                Direction facing = blockState.getValue(BlockStateProperties.HORIZONTAL_FACING);
+                // Rotar el modelo para que coincida con la orientación del tarro
+                poseStack.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
+            }
             
-            // Obtener la escala fija calculada en el BlockEntity
+            // 3. Escalar ajustado al tamaño del tarro
             float scale = blockEntity.getScale();
             poseStack.scale(scale, scale, scale);
 
-            // Congelar rotaciones y posiciones anteriores para evitar cualquier temblor
+            // Congelar rotaciones y posiciones anteriores para evitar temblores
             entity.setXRot(0.0F);
             entity.setYRot(0.0F);
             entity.xRotO = 0.0F;
@@ -48,10 +61,9 @@ public class MobJarRenderer implements BlockEntityRenderer<MobJarBlockEntity> {
             // Luz máxima para que el interior del tarro no se vea oscuro
             int maxLight = 15728880;
 
-            // IMPORTANTE: Pasar 0.0F como partialTick evita la interpolación de animaciones por frame
             Minecraft.getInstance().getEntityRenderDispatcher().render(
                 entity, 
-                0.0D, 0.0D, 0.0D, 
+                0.D, 0.0D, 0.0D, 
                 0.0F, 
                 0.0F, 
                 poseStack, 
