@@ -14,6 +14,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -88,25 +89,24 @@ public class PokeballItem extends Item {
                 tooltipComponents.add(Component.literal("§7Tier: Great Ball (Bonus: 1.3x)"));
                 tooltipComponents.add(Component.literal("§8-----------------"));
                 tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
-                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.3x + Efecto Negativo."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.3x."));
             }
             case SUPERBALL -> {
                 tooltipComponents.add(Component.literal("§7Tier: Super Ball (Bonus: 1.6x)"));
                 tooltipComponents.add(Component.literal("§8-----------------"));
                 tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
-                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.6x + Efecto Negativo."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.6x."));
             }
             case ULTRABALL -> {
                 tooltipComponents.add(Component.literal("§7Tier: Ultra Ball (Bonus: 2.0x)"));
                 tooltipComponents.add(Component.literal("§8-----------------"));
                 tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
-                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 2.0x + Efecto Negativo."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 2.0x."));
             }
             case MASTERBALL -> {
                 tooltipComponents.add(Component.literal("§6Tier: Master Ball"));
                 tooltipComponents.add(Component.literal("§8-----------------"));
                 tooltipComponents.add(Component.literal("§b• Todos los Mobs: §fCaptura instantánea del 100%."));
-                tooltipComponents.add(Component.literal("§b• Jefes / Ender Dragon: §fSin restricciones."));
             }
         }
 
@@ -115,7 +115,7 @@ public class PokeballItem extends Item {
             CompoundTag entityTag = customData.copyTag().getCompound("CapturedEntity");
             tooltipComponents.add(Component.literal("§8-----------------"));
 
-            // 1. Nombre legible del mob (sin tags crudos) o nombre personalizado
+            // 1. Nombre legible del mob o nombre personalizado
             Component mobName = Component.literal("Desconocido");
             EntityType<?> rawType = null;
 
@@ -193,10 +193,10 @@ public class PokeballItem extends Item {
             }
 
             if (armor > 0f) {
-                tooltipComponents.add(Component.literal("§7Armadura: §f" + (int)armor));
+                tooltipComponents.add(Component.literal("§7Armadura: §f" + (int)armor + " 🛡"));
             }
 
-            // 4. Efectos activos (compatible con "active_effects" y "ActiveEffects")
+            // 4. Efectos activos (con nombre localizado en lugar de ID técnico)
             ListTag effectsList = null;
             if (entityTag.contains("active_effects", 9)) {
                 effectsList = entityTag.getList("active_effects", 10);
@@ -210,7 +210,17 @@ public class PokeballItem extends Item {
                     CompoundTag effectTag = effectsList.getCompound(i);
                     String effectId = effectTag.getString("id");
                     int amplifier = effectTag.contains("amplifier", 99) ? effectTag.getInt("amplifier") : 0;
-                    tooltipComponents.add(Component.literal(" §7- §f" + effectId + " (Nivel " + (amplifier + 1) + ")"));
+                    
+                    Component effectName = Component.literal(effectId);
+                    ResourceLocation effectLoc = ResourceLocation.tryParse(effectId);
+                    if (effectLoc != null) {
+                        MobEffect mobEffect = BuiltInRegistries.MOB_EFFECT.get(effectLoc);
+                        if (mobEffect != null) {
+                            effectName = Component.translatable(mobEffect.getDescriptionId());
+                        }
+                    }
+
+                    tooltipComponents.add(Component.literal(" §7- ").append(effectName).append(" (Nivel " + (amplifier + 1) + ")"));
                 }
             }
 
