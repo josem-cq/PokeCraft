@@ -38,6 +38,10 @@ public class MobJarBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        // IMPORTANTE: el tag nunca debe quedar vacío. NeoForge ignora en el cliente los paquetes de
+        // BlockEntity con tag vacío (onDataPacket: if (!tag.isEmpty())), así que un tarro vacío sin
+        // nombre enviaba un paquete que el cliente descartaba y el mob seguía renderizándose.
+        tag.putBoolean("HasMob", storedEntityTag != null);
         if (storedEntityTag != null) {
             tag.put("StoredEntity", storedEntityTag);
         }
