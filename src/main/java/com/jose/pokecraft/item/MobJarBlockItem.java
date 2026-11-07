@@ -63,7 +63,7 @@ public class MobJarBlockItem extends BlockItem {
                 MutableComponent header = Component.literal("§aContiene: §f").append(mobName);
                 tooltipComponents.add(header);
 
-                // 2. Poké Ball que contiene al mob
+                // 2. Poké Ball de origen
                 Component ballName = Component.literal("Poké Ball");
                 if (entityTag.contains("PokeballRegistryName", 8)) {
                     ResourceLocation ballLoc = ResourceLocation.tryParse(entityTag.getString("PokeballRegistryName"));
@@ -84,7 +84,7 @@ public class MobJarBlockItem extends BlockItem {
                     effectsList = entityTag.getList("ActiveEffects", 10);
                 }
 
-                // 3. Salud actual / Salud total real del mob (Dinámica con Health Boost y Absorption)
+                // 3. Salud actual / Salud total real
                 float health = entityTag.contains("Health", 99) ? entityTag.getFloat("Health") : 20f;
                 float maxHealth = 20f;
 
@@ -98,24 +98,13 @@ public class MobJarBlockItem extends BlockItem {
                     } catch (Exception ignored) {}
                 }
 
-                if (entityTag.contains("Attributes", 9) || entityTag.contains("attributes", 9)) {
-                    ListTag attributesList = entityTag.contains("Attributes", 9) ? entityTag.getList("Attributes", 10) : entityTag.getList("attributes", 10);
-                    for (int i = 0; i < attributesList.size(); i++) {
-                        CompoundTag attrTag = attributesList.getCompound(i);
-                        String attrId = attrTag.getString("id");
-                        if ("minecraft:generic.max_health".equals(attrId) || "generic.max_health".equals(attrId)) {
-                            if (attrTag.contains("base", 99)) {
-                                maxHealth = attrTag.getFloat("base");
-                            }
-                            if (attrTag.contains("Modifiers", 9) || attrTag.contains("modifiers", 9)) {
-                                ListTag modList = attrTag.contains("Modifiers", 9) ? attrTag.getList("Modifiers", 10) : attrTag.getList("modifiers", 10);
-                                for (int m = 0; m < modList.size(); m++) {
-                                    CompoundTag modTag = modList.getCompound(m);
-                                    if (modTag.contains("amount", 99)) {
-                                        maxHealth += modTag.getFloat("amount");
-                                    }
-                                }
-                            }
+                if (effectsList != null) {
+                    for (int i = 0; i < effectsList.size(); i++) {
+                        CompoundTag effectTag = effectsList.getCompound(i);
+                        String effectId = effectTag.getString("id");
+                        int amplifier = effectTag.contains("amplifier", 99) ? effectTag.getInt("amplifier") : 0;
+                        if ("minecraft:health_boost".equals(effectId)) {
+                            maxHealth += 4.0f * (amplifier + 1);
                         }
                     }
                 }
@@ -126,10 +115,7 @@ public class MobJarBlockItem extends BlockItem {
                         CompoundTag effectTag = effectsList.getCompound(i);
                         String effectId = effectTag.getString("id");
                         int amplifier = effectTag.contains("amplifier", 99) ? effectTag.getInt("amplifier") : 0;
-                        
-                        if ("minecraft:health_boost".equals(effectId)) {
-                            maxHealth += 4.0f * (amplifier + 1);
-                        } else if ("minecraft:absorption".equals(effectId)) {
+                        if ("minecraft:absorption".equals(effectId)) {
                             absorptionAmount += 4.0f * (amplifier + 1);
                         }
                     }
@@ -142,38 +128,16 @@ public class MobJarBlockItem extends BlockItem {
                 healthStr += " §c❤";
                 tooltipComponents.add(Component.literal(healthStr));
 
-                // 4. Armadura (Natural + Modificadores NBT + Equipamiento dinámico de cualquier mod)
+                // 4. Armadura (Base natural + Equipamiento actual en ArmorItems + Protección + Resistencia)
                 float armor = 0f;
                 if (rawType != null) {
                     try {
                         @SuppressWarnings("unchecked")
                         EntityType<? extends LivingEntity> livingType = (EntityType<? extends LivingEntity>) rawType;
-                        if (DefaultAttributes.hasSupplier(livingType)) {
+                        if (DefaultAttributes.hasSupplier(livingType) && DefaultAttributes.getSupplier(livingType).hasAttribute(Attributes.ARMOR)) {
                             armor = (float) DefaultAttributes.getSupplier(livingType).getValue(Attributes.ARMOR);
                         }
                     } catch (Exception ignored) {}
-                }
-
-                if (entityTag.contains("Attributes", 9) || entityTag.contains("attributes", 9)) {
-                    ListTag attributesList = entityTag.contains("Attributes", 9) ? entityTag.getList("Attributes", 10) : entityTag.getList("attributes", 10);
-                    for (int i = 0; i < attributesList.size(); i++) {
-                        CompoundTag attrTag = attributesList.getCompound(i);
-                        String attrId = attrTag.getString("id");
-                        if ("minecraft:generic.armor".equals(attrId) || "generic.armor".equals(attrId)) {
-                            if (attrTag.contains("base", 99)) {
-                                armor = attrTag.getFloat("base");
-                            }
-                            if (attrTag.contains("Modifiers", 9) || attrTag.contains("modifiers", 9)) {
-                                ListTag modList = attrTag.contains("Modifiers", 9) ? attrTag.getList("Modifiers", 10) : attrTag.getList("modifiers", 10);
-                                for (int m = 0; m < modList.size(); m++) {
-                                    CompoundTag modTag = modList.getCompound(m);
-                                    if (modTag.contains("amount", 99)) {
-                                        armor += modTag.getFloat("amount");
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
 
                 if (entityTag.contains("ArmorItems", 9)) {
@@ -195,6 +159,21 @@ public class MobJarBlockItem extends BlockItem {
                                     }
                                 }
                             }
+                            int protLevel = getEnchantmentLevel(itemTag, "minecraft:protection");
+                            if (protLevel > 0) {
+                                armor += protLevel;
+                            }
+                        }
+                    }
+                }
+
+                if (effectsList != null) {
+                    for (int i = 0; i < effectsList.size(); i++) {
+                        CompoundTag effectTag = effectsList.getCompound(i);
+                        String effectId = effectTag.getString("id");
+                        int amplifier = effectTag.contains("amplifier", 99) ? effectTag.getInt("amplifier") : 0;
+                        if ("minecraft:resistance".equals(effectId)) {
+                            armor += 5.0f * (amplifier + 1);
                         }
                     }
                 }
@@ -203,7 +182,7 @@ public class MobJarBlockItem extends BlockItem {
                     tooltipComponents.add(Component.literal("§7Armadura: §f" + (int)armor + " 🛡"));
                 }
 
-                // 5. Daño de Ataque (Base + Modificadores NBT + Arma equipada + Pociones de Fuerza/Debilidad)
+                // 5. Daño de Ataque (Base limpia del mob + Arma actual en HandItems + Afilado + Fuerza/Debilidad)
                 double attackDamage = 1.0;
                 if (rawType != null) {
                     try {
@@ -213,28 +192,6 @@ public class MobJarBlockItem extends BlockItem {
                             attackDamage = DefaultAttributes.getSupplier(livingType).getValue(Attributes.ATTACK_DAMAGE);
                         }
                     } catch (Exception ignored) {}
-                }
-
-                if (entityTag.contains("Attributes", 9) || entityTag.contains("attributes", 9)) {
-                    ListTag attributesList = entityTag.contains("Attributes", 9) ? entityTag.getList("Attributes", 10) : entityTag.getList("attributes", 10);
-                    for (int i = 0; i < attributesList.size(); i++) {
-                        CompoundTag attrTag = attributesList.getCompound(i);
-                        String attrId = attrTag.getString("id");
-                        if ("minecraft:generic.attack_damage".equals(attrId) || "generic.attack_damage".equals(attrId)) {
-                            if (attrTag.contains("base", 99)) {
-                                attackDamage = attrTag.getDouble("base");
-                            }
-                            if (attrTag.contains("Modifiers", 9) || attrTag.contains("modifiers", 9)) {
-                                ListTag modList = attrTag.contains("Modifiers", 9) ? attrTag.getList("Modifiers", 10) : attrTag.getList("modifiers", 10);
-                                for (int m = 0; m < modList.size(); m++) {
-                                    CompoundTag modTag = modList.getCompound(m);
-                                    if (modTag.contains("amount", 99)) {
-                                        attackDamage += modTag.getDouble("amount");
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
 
                 if (entityTag.contains("HandItems", 9)) {
@@ -255,6 +212,10 @@ public class MobJarBlockItem extends BlockItem {
                                         }
                                     }
                                 }
+                            }
+                            int sharpnessLevel = getEnchantmentLevel(mainHandItemTag, "minecraft:sharpness");
+                            if (sharpnessLevel > 0) {
+                                attackDamage += 0.5 * sharpnessLevel + 0.5;
                             }
                         }
                     }
@@ -305,5 +266,46 @@ public class MobJarBlockItem extends BlockItem {
                 }
             }
         }
+    }
+
+    private static int getEnchantmentLevel(CompoundTag itemTag, String enchantmentId) {
+        if (itemTag.contains("components", 10)) {
+            CompoundTag components = itemTag.getCompound("components");
+            if (components.contains("minecraft:enchantments", 10)) {
+                CompoundTag enchComp = components.getCompound("minecraft:enchantments");
+                if (enchComp.contains("levels", 10)) {
+                    CompoundTag levels = enchComp.getCompound("levels");
+                    if (levels.contains(enchantmentId, 99)) {
+                        return levels.getInt(enchantmentId);
+                    }
+                } else if (enchComp.contains(enchantmentId, 99)) {
+                    return enchComp.getInt(enchantmentId);
+                }
+            }
+        }
+        if (itemTag.contains("tag", 10)) {
+            CompoundTag tag = itemTag.getCompound("tag");
+            if (tag.contains("Enchantments", 9)) {
+                ListTag list = tag.getList("Enchantments", 10);
+                for (int i = 0; i < list.size(); i++) {
+                    CompoundTag ench = list.getCompound(i);
+                    String id = ench.getString("id");
+                    if (enchantmentId.equals(id) || ("minecraft:" + enchantmentId).equals(id) || enchantmentId.equals("minecraft:" + id)) {
+                        return ench.contains("lvl", 99) ? ench.getInt("lvl") : (ench.contains("Level", 99) ? ench.getInt("Level") : 1);
+                    }
+                }
+            }
+        }
+        if (itemTag.contains("Enchantments", 9)) {
+            ListTag list = itemTag.getList("Enchantments", 10);
+            for (int i = 0; i < list.size(); i++) {
+                CompoundTag ench = list.getCompound(i);
+                String id = ench.getString("id");
+                if (enchantmentId.equals(id) || ("minecraft:" + enchantmentId).equals(id) || enchantmentId.equals("minecraft:" + id)) {
+                    return ench.contains("lvl", 99) ? ench.getInt("lvl") : (ench.contains("Level", 99) ? ench.getInt("Level") : 1);
+                }
+            }
+        }
+        return 0;
     }
 }
