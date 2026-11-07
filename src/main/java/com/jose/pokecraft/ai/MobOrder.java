@@ -17,8 +17,10 @@ public enum MobOrder {
     STAY("stay", false, false),
     /** Sigue al dueño y defiende (a sí mismo y al dueño). */
     PROTECT("protect", true, true),
-    /** Libre: busca y ataca a cualquier cosa que no sea el dueño ni sus aliados. */
-    ATTACK("attack", false, true);
+    /** Ataque: busca y ataca a cualquier cosa que no sea el dueño ni sus aliados. */
+    ATTACK("attack", false, true),
+    /** Libre: IA vanilla completa (sin seguir ni teletransportarse); solo evita al dueño y a sus aliados. */
+    FREE("free", false, true);
  
     private final String key;
     private final boolean followsOwner;
@@ -52,3 +54,4 @@ public enum MobOrder {
         return id >= 0 && id < all.length ? all[id] : FOLLOW;
     }
 }
+ 

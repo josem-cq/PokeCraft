@@ -24,6 +24,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -42,6 +43,22 @@ public class ModEventHandlers {
         if (event.getLevel().isClientSide()) return;
         if (event.getEntity() instanceof Mob mob && MobOrderManager.isFriendly(mob)) {
             MobOrderManager.apply(mob, MobOrderManager.getOrder(mob));
+        }
+    }
+ 
+    /**
+     * Filtro previo a cualquier cambio de objetivo de un mob de PokeCraft, venga de donde venga (metas nativas,
+     * ira de neutrales, otros mods): si el modo actual no permite ese objetivo (cualquiera en Seguir/Quieto;
+     * el dueño y sus aliados en el resto), se sustituye por "sin objetivo". Es lo que permite que el modo
+     * Libre conserve la IA nativa sin que el mob llegue a apuntar al dueño ni un instante.
+     */
+    @SubscribeEvent
+    public static void onLivingChangeTarget(LivingChangeTargetEvent event) {
+        if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) return;
+        LivingEntity newTarget = event.getNewAboutToBeSetTarget();
+        if (newTarget == null || !MobOrderManager.isFriendly(mob)) return;
+        if (!MobOrderManager.isTargetAllowed(mob, newTarget, MobOrderManager.getOrder(mob))) {
+            event.setNewAboutToBeSetTarget(null);
         }
     }
  

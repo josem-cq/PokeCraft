@@ -1,7 +1,9 @@
 package com.jose.pokecraft.ai;
  
+import com.jose.pokecraft.ai.goal.AttackTargetGoal;
 import com.jose.pokecraft.ai.goal.FollowOwnerMobGoal;
 import com.jose.pokecraft.ai.goal.ManagedGoal;
+import com.jose.pokecraft.ai.goal.NativeTargetStashGoal;
 import com.jose.pokecraft.ai.goal.ProtectTargetGoal;
 import com.jose.pokecraft.ai.goal.StayPutGoal;
 import com.jose.pokecraft.ai.goal.TargetGuardGoal;
@@ -13,12 +15,12 @@ import net.minecraft.world.entity.NeutralMob;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
-import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
  
+import java.util.List;
 import java.util.UUID;
  
 /**
@@ -33,6 +35,8 @@ public final class MobOrderManager {
     public static final String KEY_FRIENDLY = "PokeCraftFriendly";
     public static final String KEY_OWNER = "OwnerUUID";
     public static final String KEY_ORDER = "MobOrderState";
+    /** Última vez (gameTime) que el mob tuvo un objetivo de ataque válido. */
+    public static final String KEY_LAST_COMBAT = "PokeCraftLastCombat";
  
     /** Distancias de seguimiento (bloques). */
     private static final float FOLLOW_START = 6.0F;
@@ -84,6 +88,35 @@ public final class MobOrderManager {
     }
  
     // ---------------------------------------------------------------------------------------------
+    // Combate (para decidir cuándo se puede teletransportar)
+    // ---------------------------------------------------------------------------------------------
+ 
+    /** Lo llama TargetGuardGoal cada tick mientras el mob tiene un objetivo válido. */
+    public static void markCombat(Mob mob) {
+        mob.getPersistentData().putLong(KEY_LAST_COMBAT, mob.level().getGameTime());
+    }
+ 
+    /**
+     * Ticks desde el último combate: el menor entre (a) la última vez que tuvo objetivo, (b) la última vez que
+     * recibió daño de una entidad y (c) la última vez que hirió a una entidad.
+     */
+    public static long ticksSinceCombat(Mob mob) {
+        long result = Long.MAX_VALUE;
+ 
+        CompoundTag data = mob.getPersistentData();
+        if (data.contains(KEY_LAST_COMBAT)) {
+            result = Math.min(result, mob.level().getGameTime() - data.getLong(KEY_LAST_COMBAT));
+        }
+        if (mob.getLastHurtByMob() != null) {
+            result = Math.min(result, mob.tickCount - mob.getLastHurtByMobTimestamp());
+        }
+        if (mob.getLastHurtMob() != null) {
+            result = Math.min(result, mob.tickCount - mob.getLastHurtMobTimestamp());
+        }
+        return result;
+    }
+ 
+    // ---------------------------------------------------------------------------------------------
     // Reglas de objetivos
     // ---------------------------------------------------------------------------------------------
  
@@ -115,13 +148,16 @@ public final class MobOrderManager {
     public static void apply(Mob mob, MobOrder order) {
         if (mob.level().isClientSide) return;
  
+        // 0. Guardar (una sola vez) las metas de objetivo nativas, para poder restaurarlas en el modo FREE.
+        NativeTargetStashGoal stash = ensureNativeStash(mob);
+ 
         // 1. Parar lo que esté ejecutándose (libera las banderas MOVE/LOOK/TARGET y deja de perseguir).
         stopRunningGoals(mob.goalSelector);
         stopRunningGoals(mob.targetSelector);
  
         // 2. Quitar SOLO nuestras metas del goalSelector (la IA nativa de movimiento y combate se conserva)
-        //    y VACIAR el targetSelector: así se neutraliza la IA de selección de blancos original
-        //    (zombie contra aldeanos, HurtByTarget, ira de neutrales...). Se reemplaza por la del modo.
+        //    y VACIAR el targetSelector. Así se neutraliza la IA de selección de blancos original
+        //    (zombie contra aldeanos, HurtByTarget, ira de neutrales...). Cada modo pone la suya.
         mob.goalSelector.getAvailableGoals().removeIf(w -> w.getGoal() instanceof ManagedGoal);
         mob.targetSelector.getAvailableGoals().clear();
  
@@ -139,16 +175,37 @@ public final class MobOrderManager {
             case FOLLOW -> mob.goalSelector.addGoal(3, followGoal(mob));
             case PROTECT -> {
                 mob.goalSelector.addGoal(3, followGoal(mob));
-                mob.targetSelector.addGoal(1, new ProtectTargetGoal(mob));
+                mob.targetSelector.addGoal(1, new ProtectTargetGoal(mob, ProtectTargetGoal.Role.SELF));
+                mob.targetSelector.addGoal(2, new ProtectTargetGoal(mob, ProtectTargetGoal.Role.OWNER));
             }
             case ATTACK -> mob.targetSelector.addGoal(2,
-                    new NearestAttackableTargetGoal<>(mob, LivingEntity.class, 10, true, false,
-                            target -> isAttackModeTarget(mob, target)));
+                    new AttackTargetGoal(mob, target -> isAttackModeTarget(mob, target)));
+            // FREE: sin metas de movimiento y con la IA de objetivos original. El TargetGuardGoal (y el
+            // LivingChangeTargetEvent) impiden que elija al dueño o a sus aliados.
+            case FREE -> mob.targetSelector.getAvailableGoals().addAll(stash.getStashed());
         }
     }
  
     private static FollowOwnerMobGoal followGoal(Mob mob) {
         return new FollowOwnerMobGoal(mob, FOLLOW_SPEED, FOLLOW_START, FOLLOW_STOP, FOLLOW_TELEPORT);
+    }
+ 
+    /**
+     * Devuelve el guardián de metas nativas del mob; si no existe (primer apply tras crearse/cargarse el mob),
+     * lo crea con las metas de objetivo que tiene ahora mismo, que todavía son las originales.
+     */
+    private static NativeTargetStashGoal ensureNativeStash(Mob mob) {
+        for (WrappedGoal wrapped : mob.goalSelector.getAvailableGoals()) {
+            if (wrapped.getGoal() instanceof NativeTargetStashGoal existing) {
+                return existing;
+            }
+        }
+        List<WrappedGoal> natives = mob.targetSelector.getAvailableGoals().stream()
+                .filter(w -> !(w.getGoal() instanceof ManagedGoal))
+                .toList();
+        NativeTargetStashGoal stash = new NativeTargetStashGoal(natives);
+        mob.goalSelector.addGoal(Integer.MAX_VALUE, stash);
+        return stash;
     }
  
     /**

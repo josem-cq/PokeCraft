@@ -19,6 +19,9 @@ import java.util.EnumSet;
  * Si el mob tiene un objetivo vivo, cede el control para que las metas nativas (melee, arco...) actúen.
  */
 public class FollowOwnerMobGoal extends Goal implements ManagedGoal {
+    /** 3 segundos sin combate antes de permitir el teletransporte. */
+    private static final int TELEPORT_CALM_TICKS = 60;
+ 
     private final Mob mob;
     private final double speed;
     private final double startDistSqr;
@@ -81,7 +84,10 @@ public class FollowOwnerMobGoal extends Goal implements ManagedGoal {
         if (--timeToRecalcPath > 0) return;
         timeToRecalcPath = adjustedTickDelay(10);
  
-        if (mob.distanceToSqr(owner) >= teleportDistSqr) {
+        // Solo se teletransporta si lleva TELEPORT_CALM_TICKS sin objetivo ni daño dado/recibido. Si el mob
+        // acaba de pelear lejos del dueño, vuelve caminando; así no hay bucle de huir y teletransportarse.
+        boolean calm = MobOrderManager.ticksSinceCombat(mob) >= TELEPORT_CALM_TICKS;
+        if (calm && mob.distanceToSqr(owner) >= teleportDistSqr) {
             teleportToOwner();
         } else {
             mob.getNavigation().moveTo(owner, speed);
