@@ -1,6 +1,6 @@
 # PokeCraft 🎒🔴
 
-**PokeCraft** es un mod de Minecraft desarrollado para **NeoForge 1.21.1**[cite: 6] que introduce mecánicas únicas inspiradas en la captura de criaturas, junto con herramientas de utilidad avanzada como aljabas, tarros de mobs decorativos y un sistema completo de Poké Balls con diferentes tiers de efectividad.
+**PokeCraft** es un mod de Minecraft desarrollado para **NeoForge 1.21.1** que introduce mecánicas únicas inspiradas en la captura de criaturas, junto con herramientas de utilidad avanzada como aljabas, tarros de mobs decorativos y un sistema completo de Poké Balls con diferentes tiers de efectividad.
 
 ---
 
