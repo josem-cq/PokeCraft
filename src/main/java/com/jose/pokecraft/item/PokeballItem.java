@@ -30,6 +30,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
@@ -92,16 +93,16 @@ public class PokeballItem extends Item {
                 tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.3x."));
             }
             case SUPERBALL -> {
-                tooltipComponents.add(Component.literal("§7Tier: Super Ball (Bonus: 1.6x)"));
+                tooltipComponents.add(Component.literal("§7Tier: Super Ball (Bonus: 1.8x)"));
                 tooltipComponents.add(Component.literal("§8-----------------"));
                 tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
-                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.6x."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 1.8x."));
             }
             case ULTRABALL -> {
-                tooltipComponents.add(Component.literal("§7Tier: Ultra Ball (Bonus: 2.0x)"));
+                tooltipComponents.add(Component.literal("§7Tier: Ultra Ball (Bonus: 2.5x)"));
                 tooltipComponents.add(Component.literal("§8-----------------"));
                 tooltipComponents.add(Component.literal("§a• Pasivos: §f100% de probabilidad fija."));
-                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 2.0x."));
+                tooltipComponents.add(Component.literal("§e• Neutrales/Hostiles: §fMultiplicador 2.5x."));
             }
             case MASTERBALL -> {
                 tooltipComponents.add(Component.literal("§6Tier: Master Ball"));
@@ -139,7 +140,15 @@ public class PokeballItem extends Item {
             MutableComponent header = Component.literal("§aContiene: §f").append(mobName);
             tooltipComponents.add(header);
 
-            // 2. Salud actual / Salud total real del mob
+            // Lista de efectos activos (para cálculos de pociones)
+            ListTag effectsList = null;
+            if (entityTag.contains("active_effects", 9)) {
+                effectsList = entityTag.getList("active_effects", 10);
+            } else if (entityTag.contains("ActiveEffects", 9)) {
+                effectsList = entityTag.getList("ActiveEffects", 10);
+            }
+
+            // 2. Salud actual / Salud total real del mob (Dinámica con Health Boost y Absorption)
             float health = entityTag.contains("Health", 99) ? entityTag.getFloat("Health") : 20f;
             float maxHealth = 20f;
 
@@ -162,12 +171,42 @@ public class PokeballItem extends Item {
                         if (attrTag.contains("base", 99)) {
                             maxHealth = attrTag.getFloat("base");
                         }
+                        if (attrTag.contains("Modifiers", 9) || attrTag.contains("modifiers", 9)) {
+                            ListTag modList = attrTag.contains("Modifiers", 9) ? attrTag.getList("Modifiers", 10) : attrTag.getList("modifiers", 10);
+                            for (int m = 0; m < modList.size(); m++) {
+                                CompoundTag modTag = modList.getCompound(m);
+                                if (modTag.contains("amount", 99)) {
+                                    maxHealth += modTag.getFloat("amount");
+                                }
+                            }
+                        }
                     }
                 }
             }
-            tooltipComponents.add(Component.literal("§7Salud: §f" + (int)Math.ceil(health) + " / " + (int)Math.ceil(maxHealth) + " §c❤"));
 
-            // 3. Armadura (natural por atributos o equipamiento)
+            float absorptionAmount = 0f;
+            if (effectsList != null) {
+                for (int i = 0; i < effectsList.size(); i++) {
+                    CompoundTag effectTag = effectsList.getCompound(i);
+                    String effectId = effectTag.getString("id");
+                    int amplifier = effectTag.contains("amplifier", 99) ? effectTag.getInt("amplifier") : 0;
+                    
+                    if ("minecraft:health_boost".equals(effectId)) {
+                        maxHealth += 4.0f * (amplifier + 1);
+                    } else if ("minecraft:absorption".equals(effectId)) {
+                        absorptionAmount += 4.0f * (amplifier + 1);
+                    }
+                }
+            }
+
+            String healthStr = "§7Salud: §f" + (int)Math.ceil(health) + " / " + (int)Math.ceil(maxHealth);
+            if (absorptionAmount > 0f) {
+                healthStr += " (+" + (int)absorptionAmount + " 💛)";
+            }
+            healthStr += " §c❤";
+            tooltipComponents.add(Component.literal(healthStr));
+
+            // 3. Armadura (Natural + Modificadores NBT + Equipamiento dinámico de cualquier mod)
             float armor = 0f;
             if (rawType != null) {
                 try {
@@ -188,6 +227,38 @@ public class PokeballItem extends Item {
                         if (attrTag.contains("base", 99)) {
                             armor = attrTag.getFloat("base");
                         }
+                        if (attrTag.contains("Modifiers", 9) || attrTag.contains("modifiers", 9)) {
+                            ListTag modList = attrTag.contains("Modifiers", 9) ? attrTag.getList("Modifiers", 10) : attrTag.getList("modifiers", 10);
+                            for (int m = 0; m < modList.size(); m++) {
+                                CompoundTag modTag = modList.getCompound(m);
+                                if (modTag.contains("amount", 99)) {
+                                    armor += modTag.getFloat("amount");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (entityTag.contains("ArmorItems", 9)) {
+                ListTag armorItems = entityTag.getList("ArmorItems", 10);
+                for (int i = 0; i < armorItems.size(); i++) {
+                    CompoundTag itemTag = armorItems.getCompound(i);
+                    if (itemTag.contains("id", 8)) {
+                        ResourceLocation itemLoc = ResourceLocation.tryParse(itemTag.getString("id"));
+                        if (itemLoc != null) {
+                            Item armorItem = BuiltInRegistries.ITEM.get(itemLoc);
+                            if (armorItem != null) {
+                                ItemAttributeModifiers modifiers = armorItem.getDefaultAttributeModifiers();
+                                if (modifiers != null) {
+                                    for (ItemAttributeModifiers.Entry entry : modifiers.modifiers()) {
+                                        if (entry.attribute().is(Attributes.ARMOR)) {
+                                            armor += (float) entry.modifier().amount();
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -196,14 +267,82 @@ public class PokeballItem extends Item {
                 tooltipComponents.add(Component.literal("§7Armadura: §f" + (int)armor + " 🛡"));
             }
 
-            // 4. Efectos activos (con nombre localizado en lugar de ID técnico)
-            ListTag effectsList = null;
-            if (entityTag.contains("active_effects", 9)) {
-                effectsList = entityTag.getList("active_effects", 10);
-            } else if (entityTag.contains("ActiveEffects", 9)) {
-                effectsList = entityTag.getList("ActiveEffects", 10);
+            // 4. Daño de Ataque (Base + Modificadores NBT + Arma equipada + Pociones de Fuerza/Debilidad)
+            double attackDamage = 1.0;
+            if (rawType != null) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    EntityType<? extends LivingEntity> livingType = (EntityType<? extends LivingEntity>) rawType;
+                    if (DefaultAttributes.hasSupplier(livingType) && DefaultAttributes.getSupplier(livingType).hasAttribute(Attributes.ATTACK_DAMAGE)) {
+                        attackDamage = DefaultAttributes.getSupplier(livingType).getValue(Attributes.ATTACK_DAMAGE);
+                    }
+                } catch (Exception ignored) {}
             }
 
+            if (entityTag.contains("Attributes", 9) || entityTag.contains("attributes", 9)) {
+                ListTag attributesList = entityTag.contains("Attributes", 9) ? entityTag.getList("Attributes", 10) : entityTag.getList("attributes", 10);
+                for (int i = 0; i < attributesList.size(); i++) {
+                    CompoundTag attrTag = attributesList.getCompound(i);
+                    String attrId = attrTag.getString("id");
+                    if ("minecraft:generic.attack_damage".equals(attrId) || "generic.attack_damage".equals(attrId)) {
+                        if (attrTag.contains("base", 99)) {
+                            attackDamage = attrTag.getDouble("base");
+                        }
+                        if (attrTag.contains("Modifiers", 9) || attrTag.contains("modifiers", 9)) {
+                            ListTag modList = attrTag.contains("Modifiers", 9) ? attrTag.getList("Modifiers", 10) : attrTag.getList("modifiers", 10);
+                            for (int m = 0; m < modList.size(); m++) {
+                                CompoundTag modTag = modList.getCompound(m);
+                                if (modTag.contains("amount", 99)) {
+                                    attackDamage += modTag.getDouble("amount");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (entityTag.contains("HandItems", 9)) {
+                ListTag handItems = entityTag.getList("HandItems", 10);
+                if (!handItems.isEmpty()) {
+                    CompoundTag mainHandItemTag = handItems.getCompound(0);
+                    if (mainHandItemTag.contains("id", 8)) {
+                        ResourceLocation itemLoc = ResourceLocation.tryParse(mainHandItemTag.getString("id"));
+                        if (itemLoc != null) {
+                            Item weaponItem = BuiltInRegistries.ITEM.get(itemLoc);
+                            if (weaponItem != null) {
+                                ItemAttributeModifiers modifiers = weaponItem.getDefaultAttributeModifiers();
+                                if (modifiers != null) {
+                                    for (ItemAttributeModifiers.Entry entry : modifiers.modifiers()) {
+                                        if (entry.attribute().is(Attributes.ATTACK_DAMAGE)) {
+                                            attackDamage += entry.modifier().amount();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (effectsList != null) {
+                for (int i = 0; i < effectsList.size(); i++) {
+                    CompoundTag effectTag = effectsList.getCompound(i);
+                    String effectId = effectTag.getString("id");
+                    int amplifier = effectTag.contains("amplifier", 99) ? effectTag.getInt("amplifier") : 0;
+                    
+                    if ("minecraft:strength".equals(effectId)) {
+                        attackDamage += 3.0 * (amplifier + 1);
+                    } else if ("minecraft:weakness".equals(effectId)) {
+                        attackDamage = Math.max(0.0, attackDamage - 4.0 * (amplifier + 1));
+                    }
+                }
+            }
+
+            if (attackDamage > 0.0) {
+                tooltipComponents.add(Component.literal("§7Daño: §f" + String.format("%.1f", attackDamage) + " ⚔"));
+            }
+
+            // 5. Efectos activos (con nombre localizado)
             if (effectsList != null && !effectsList.isEmpty()) {
                 tooltipComponents.add(Component.literal("§7Efectos activos:"));
                 for (int i = 0; i < effectsList.size(); i++) {
@@ -224,7 +363,7 @@ public class PokeballItem extends Item {
                 }
             }
 
-            // 5. Al final en gris el mod:mob que actualmente está almacenado
+            // 6. Al final en gris el ID técnico
             if (entityTag.contains("id", 8)) {
                 tooltipComponents.add(Component.literal("§7ID: " + entityTag.getString("id")));
             }
@@ -234,7 +373,6 @@ public class PokeballItem extends Item {
     public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack thrownStack) {
         if (target.level().isClientSide()) return false;
 
-        // BINDING: Nunca permitir capturar jugadores ni Soportes de Armadura (ArmorStand)
         if (target instanceof Player || target instanceof net.minecraft.world.entity.decoration.ArmorStand) {
             return false;
         }
@@ -257,8 +395,8 @@ public class PokeballItem extends Item {
         float ballBonus = switch (tier) {
             case POKEBALL -> 1.0f;
             case GREATBALL -> 1.3f;
-            case SUPERBALL -> 1.6f;
-            case ULTRABALL -> 2.0f;
+            case SUPERBALL -> 1.8f;
+            case ULTRABALL -> 2.5f;
             case MASTERBALL -> 10.0f;
         };
 
@@ -270,8 +408,12 @@ public class PokeballItem extends Item {
         float mobType = isNeutral ? 0.20f : 0.0f;
 
         float catchRate;
-        if (hpMax >= 20.0f) {
-            catchRate = ((3.0f * hpMax - 2.0f * hpCurrent) / (3.0f * hpMax)) * (20.0f / hpMax) * ballBonus * statusBonus + mobType;
+        double expComponent = 77.0 * (1.0 - Math.exp(-0.033 * 2.0 * Math.sqrt(hpMax)));
+
+        if (hpMax >= 12.0f) {
+            catchRate = (float) (((3.0f * hpMax - 2.0f * hpCurrent) / (3.0f * hpMax)) 
+                        * (12.0f / expComponent) 
+                        * ballBonus * statusBonus + mobType);
         } else {
             catchRate = ((5.0f * hpMax - hpCurrent) / (5.0f * hpMax)) * ballBonus * statusBonus + mobType;
         }

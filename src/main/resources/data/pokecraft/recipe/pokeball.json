@@ -1,11 +1,14 @@
 {
   "type": "minecraft:crafting_shaped",
-  "pattern": ["BCR", "I C", " I "],
+  "pattern": ["BCR", "IEC", "LIA"],
   "key": {
     "C": { "item": "minecraft:copper_ingot" },
     "I": { "item": "minecraft:iron_ingot" },
     "B": { "tag": "minecraft:buttons" },
-    "R": { "item": "minecraft:redstone" }
+    "R": { "item": "minecraft:redstone" },
+    "A": { "item": "minecraft:amethyst_shard" },
+    "L": { "item": "minecraft:lapis_lazuli" },
+    "E": { "item": "minecraft:ender_pearl" }
   },
   "result": { "id": "pokecraft:pokeball", "count": 1 }
 }

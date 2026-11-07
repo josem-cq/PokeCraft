@@ -1,9 +1,9 @@
 package com.jose.pokecraft;
 
+import com.jose.pokecraft.item.MobJarBlockItem;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -35,11 +35,11 @@ public class PokeCraftMod {
     public static final DeferredHolder<Item, Item> ULTRABALL = ITEMS.register("ultraball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.jose.pokecraft.item.PokeballItem.Tier.ULTRABALL));
     public static final DeferredHolder<Item, Item> MASTERBALL = ITEMS.register("masterball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(1), com.jose.pokecraft.item.PokeballItem.Tier.MASTERBALL));
 
-    // Registro de Bloques e Items asociados
+    // Registro de Bloques e Ítems asociados (Usando MobJarBlockItem personalizado)
     public static final DeferredHolder<Block, Block> MOB_JAR_BLOCK = BLOCKS.register("mob_jar", () -> new com.jose.pokecraft.block.MobJarBlock(
         BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_LIGHT_BLUE).strength(0.5F).sound(SoundType.GLASS).noOcclusion()
     ));
-    public static final DeferredHolder<Item, Item> MOB_JAR_ITEM = ITEMS.register("mob_jar", () -> new BlockItem(MOB_JAR_BLOCK.get(), new Item.Properties().stacksTo(64)));
+    public static final DeferredHolder<Item, Item> MOB_JAR_ITEM = ITEMS.register("mob_jar", () -> new MobJarBlockItem(MOB_JAR_BLOCK.get(), new Item.Properties().stacksTo(64)));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.jose.pokecraft.block.MobJarBlockEntity>> MOB_JAR_BE = BLOCK_ENTITIES.register("mob_jar_be", () ->
         BlockEntityType.Builder.of(com.jose.pokecraft.block.MobJarBlockEntity::new, MOB_JAR_BLOCK.get()).build(null)
