@@ -100,16 +100,18 @@ public class ModEventHandlers {
             boolean offHasStick = offHand.is(Items.STICK);
  
             if (mainHasStick || offHasStick) {
-                // Si ambas manos tienen palo, evitamos la duplicación procesando únicamente en MAIN_HAND
-                if (mainHasStick && offHasStick && event.getHand() != InteractionHand.MAIN_HAND) {
+                // Vanilla envía UN paquete de interacción POR MANO por cada clic derecho (el cliente no
+                // consume la interacción, así que prueba main hand y luego off hand). Hay que cambiar de modo
+                // solo en el evento de la mano que realmente sostiene el palo; si no, un clic con el palo en la
+                // mano principal avanzaba el ciclo DOS veces y con 4 modos solo se veían 2 de ellos.
+                boolean handlesThisEvent = event.getItemStack().is(Items.STICK)
+                        && (event.getHand() == InteractionHand.MAIN_HAND || !mainHasStick);
+ 
+                if (!handlesThisEvent) {
+                    // Evento de la otra mano: se absorbe sin hacer nada (evita acciones vanilla con esa mano).
                     event.setCancellationResult(InteractionResult.SUCCESS);
                     event.setCanceled(true);
                     return;
-                }
- 
-                // Si solo la mano secundaria tiene palo, procesamos cuando el evento provenga de OFF_HAND
-                if (!mainHasStick && offHasStick && event.getHand() != InteractionHand.OFF_HAND) {
-                    return; // Dejar que pase al evento de offhand
                 }
  
                 // Las órdenes solo tienen sentido en Mob (los que tienen IA de metas)

@@ -36,6 +36,7 @@ public class FollowOwnerMobGoal extends Goal implements ManagedGoal {
         this.teleportDistSqr = teleportDistance * teleportDistance;
         this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
     }
+ 
     private boolean hasLiveTarget() {
         LivingEntity target = mob.getTarget();
         return target != null && target.isAlive();
