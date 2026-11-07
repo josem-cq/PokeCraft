@@ -6,5 +6,10 @@
   "item.pokecraft.superball": "Superball",
   "item.pokecraft.ultraball": "Ultraball",
   "item.pokecraft.masterball": "Masterball",
-  "block.pokecraft.mob_jar": "Mob Jar"
+  "block.pokecraft.mob_jar": "Mob Jar",
+  "pokecraft.order.follow": "following",
+  "pokecraft.order.stay": "staying still",
+  "pokecraft.order.protect": "protecting",
+  "pokecraft.order.attack": "attacking",
+  "message.pokecraft.order_changed": "[%1$s] is now %2$s"
 }
