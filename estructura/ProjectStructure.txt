@@ -52,8 +52,22 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │   │   configuration-cache.lock
 │   │   │   gc.properties
 │   │   │
+│   │   ├───15c08852-084e-4b71-9fa2-63bc61684128
 │   │   ├───3d7039d5-49e0-4a69-a60f-6b54f6cc02f3
+│   │   ├───3dd8516c-c86c-4866-86cd-5ebb3415945e
 │   │   ├───517f8bea-d18e-4dcd-ba0e-2c80c902b7fd
+│   │   ├───5q828ghtetg4ihp988dwwsqw3
+│   │   │       candidates.bin
+│   │   │
+│   │   ├───73b24deb-2474-4889-a920-2fea1f4709c0
+│   │   ├───947a4118-e166-40ae-9deb-d92d92c52ec8
+│   │   ├───9d4d5556-f0a9-40bc-87cf-bfe729b817de
+│   │   ├───a3125764-b419-475e-bd77-0e20cfda088c
+│   │   ├───c080be4b-6e37-4912-8a01-07f6b813146b
+│   │   ├───c140a5ef-c3ab-40e9-b43c-77a4b860f19f
+│   │   ├───cde9250d-57f9-446a-a266-4ab002ea9654
+│   │   ├───ce5ff72c-2af1-4ded-a316-f9e31cc0aa29
+│   │   ├───d5c9b32d-d8c8-4b55-9a49-98f24338f60c
 │   │   │       .globals.work.bin
 │   │   │       .strings.work.bin
 │   │   │       build.work.bin
@@ -64,32 +78,9 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │   │       work.bin
 │   │   │       _.work.bin
 │   │   │
-│   │   ├───5q828ghtetg4ihp988dwwsqw3
-│   │   │       candidates.bin
-│   │   │
-│   │   ├───83e39e28-64c2-49b8-893d-434020b81917
-│   │   ├───947a4118-e166-40ae-9deb-d92d92c52ec8
-│   │   ├───a3125764-b419-475e-bd77-0e20cfda088c
-│   │   ├───c080be4b-6e37-4912-8a01-07f6b813146b
-│   │   ├───cde9250d-57f9-446a-a266-4ab002ea9654
-│   │   ├───ce5ff72c-2af1-4ded-a316-f9e31cc0aa29
-│   │   ├───cfa3d37d-bd50-4b0d-b171-d09707a73427
-│   │   ├───dbd49c60-e15d-4b80-ab19-1865e9e1ac03
-│   │   ├───edlqdfq4ho6n4dtfcc9dk81l2
-│   │   │       candidates.bin
-│   │   │
 │   │   ├───f1b75334-0e21-4a8e-8964-7db326628cc4
-│   │   ├───f47ec323-9c54-4d80-91d0-cf4f2f090e66
-│   │   │       .globals.work.bin
-│   │   │       .strings.work.bin
-│   │   │       buildfingerprint.bin
-│   │   │       classloaderscopes.bin
-│   │   │       entry.bin
-│   │   │       projectfingerprint.bin
-│   │   │       work.bin
-│   │   │       _.work.bin
-│   │   │
-│   │   └───fde7da8f-be3c-47c3-8d82-062db0a2a622
+│   │   ├───f825ce45-2645-4716-9426-20aa0be3c841
+│   │   └───ff69a308-6c5c-401c-9dc6-ccd88821424a
 │   └───vcs-1
 │           gc.properties
 │
@@ -124,6 +115,7 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │                       │       ModEventHandlers.class
 │   │                       │
 │   │                       └───item
+│   │                               MobJarBlockItem.class
 │   │                               PokeballItem$Tier.class
 │   │                               PokeballItem.class
 │   │                               QuiverItem$1.class
@@ -142,7 +134,7 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │                   neoforge.mods.toml
 │   │
 │   ├───libs
-│   │       pokecraft-1.0.17.3.jar
+│   │       pokecraft-1.0.19.1.jar
 │   │
 │   ├───moddev
 │   │   └───artifacts
@@ -152,11 +144,6 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │           neoforge-21.1.262.jar
 │   │
 │   ├───reports
-│   │   ├───configuration-cache
-│   │   │   └───5q828ghtetg4ihp988dwwsqw3
-│   │   │       └───arfj002tzk4j75z1ow14w64of
-│   │   │               configuration-cache-report.html
-│   │   │
 │   │   └───problems
 │   │           problems-report.html
 │   │
@@ -171,13 +158,28 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │       │       │       en_us.json
 │   │       │       │       es_es.json
 │   │       │       │
-│   │       │       └───models
-│   │       │           ├───block
-│   │       │           │       mob_jar.json
-│   │       │           │
+│   │       │       ├───models
+│   │       │       │   ├───block
+│   │       │       │   │       mob_jar.json
+│   │       │       │   │
+│   │       │       │   └───item
+│   │       │       │           greatball.json
+│   │       │       │           masterball.json
+│   │       │       │           mob_jar.json
+│   │       │       │           pokeball.json
+│   │       │       │           quiver.json
+│   │       │       │           superball.json
+│   │       │       │           ultraball.json
+│   │       │       │
+│   │       │       └───textures
+│   │       │           ├───font
 │   │       │           └───item
-│   │       │                   mob_jar.json
-│   │       │                   pokeball.json
+│   │       │                   greatball.png
+│   │       │                   masterball.png
+│   │       │                   pokeball.png
+│   │       │                   quiver.png
+│   │       │                   superball.png
+│   │       │                   ultraball.png
 │   │       │
 │   │       ├───data
 │   │       │   └───pokecraft
@@ -206,10 +208,10 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │       │       MANIFEST.MF
 │       │
 │       └───neoformruntime
-│           ├───20261104-152721_downloadClient
-│           ├───20261104-152721_downloadClientMappings
-│           ├───20261104-152721_downloadJson
-│           └───20261104-152721_downloadServer
+│           ├───20261107-010727_downloadClient
+│           ├───20261107-010727_downloadClientMappings
+│           ├───20261107-010727_downloadJson
+│           └───20261107-010727_downloadServer
 ├───estructura
 │       ProjectStructure.txt
 │
@@ -243,6 +245,7 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
         │               │       ModEventHandlers.java
         │               │
         │               └───item
+        │                       MobJarBlockItem.java
         │                       PokeballItem.java
         │                       QuiverItem.java
         │
@@ -256,13 +259,28 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
         │   │       │       en_us.json
         │   │       │       es_es.json
         │   │       │
-        │   │       └───models
-        │   │           ├───block
-        │   │           │       mob_jar.json
-        │   │           │
+        │   │       ├───models
+        │   │       │   ├───block
+        │   │       │   │       mob_jar.json
+        │   │       │   │
+        │   │       │   └───item
+        │   │       │           greatball.json
+        │   │       │           masterball.json
+        │   │       │           mob_jar.json
+        │   │       │           pokeball.json
+        │   │       │           quiver.json
+        │   │       │           superball.json
+        │   │       │           ultraball.json
+        │   │       │
+        │   │       └───textures
+        │   │           ├───font
         │   │           └───item
-        │   │                   mob_jar.json
-        │   │                   pokeball.json
+        │   │                   greatball.png
+        │   │                   masterball.png
+        │   │                   pokeball.png
+        │   │                   quiver.png
+        │   │                   superball.png
+        │   │                   ultraball.png
         │   │
         │   ├───data
         │   │   └───pokecraft
