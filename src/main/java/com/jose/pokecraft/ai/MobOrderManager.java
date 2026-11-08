@@ -1,6 +1,8 @@
 package com.jose.pokecraft.ai;
  
 import com.jose.pokecraft.ai.goal.AttackTargetGoal;
+import com.jose.pokecraft.ai.goal.DirectApproachGoal;
+import com.jose.pokecraft.ai.goal.DirectTargetGoal;
 import com.jose.pokecraft.ai.goal.FollowOwnerMobGoal;
 import com.jose.pokecraft.ai.goal.ManagedGoal;
 import com.jose.pokecraft.ai.goal.NativeTargetStashGoal;
@@ -8,6 +10,7 @@ import com.jose.pokecraft.ai.goal.ProtectTargetGoal;
 import com.jose.pokecraft.ai.goal.StayPutGoal;
 import com.jose.pokecraft.ai.goal.TargetGuardGoal;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -20,16 +23,20 @@ import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
  
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
  
 /**
  * Gestor central de órdenes. Es el ÚNICO sitio que toca goalSelector / targetSelector de un mob de PokeCraft.
  *
- * Persistencia: dueño, bandera de aliado y modo viven en {@link Entity#getPersistentData()} (NeoForge lo serializa
- * con la entidad, y por eso también viaja dentro del NBT "CapturedEntity" de la Poké Ball). Las metas NO se
- * serializan, así que {@link #apply} se vuelve a llamar en EntityJoinLevelEvent (carga de chunk, reinicio, dimensión,
- * liberación desde la bola).
+ * Persistencia: dueño, bandera de aliado, modo y ataque directo viven en {@link Entity#getPersistentData()}
+ * (NeoForge lo serializa con la entidad, y por eso también viaja dentro del NBT "CapturedEntity" de la Poké Ball).
+ * Las metas NO se serializan, así que {@link #apply} se vuelve a llamar en EntityJoinLevelEvent (carga de chunk,
+ * reinicio, dimensión, liberación desde la bola).
+ *
+ * Ataque directo: es una SUPERPOSICIÓN sobre el modo, no un modo nuevo. El modo guardado (MobOrderState) no se toca,
+ * así que al terminar el ataque basta con volver a llamar a {@link #apply} para regresar exactamente al modo previo.
  */
 public final class MobOrderManager {
     public static final String KEY_FRIENDLY = "PokeCraftFriendly";
@@ -37,6 +44,9 @@ public final class MobOrderManager {
     public static final String KEY_ORDER = "MobOrderState";
     /** Última vez (gameTime) que el mob tuvo un objetivo de ataque válido. */
     public static final String KEY_LAST_COMBAT = "PokeCraftLastCombat";
+    /** UUID de la entidad marcada con el palo (ataque directo activo) y su nombre para los mensajes. */
+    public static final String KEY_DIRECT_TARGET = "PokeCraftDirectTarget";
+    public static final String KEY_DIRECT_NAME = "PokeCraftDirectName";
  
     /** Distancias de seguimiento (bloques). */
     private static final float FOLLOW_START = 6.0F;
@@ -46,6 +56,12 @@ public final class MobOrderManager {
  
     /** En modo ATTACK, ¿puede atacar a jugadores que no sean el dueño? Por defecto no. */
     private static final boolean ATTACK_OTHER_PLAYERS = false;
+ 
+    /**
+     * Mobs cuyo modo hay que reaplicar al final del tick. Las metas no pueden reinstalarse desde dentro de su propio
+     * tick (se modificaría el conjunto de metas mientras el GoalSelector lo recorre).
+     */
+    private static final List<Mob> PENDING_REFRESH = new ArrayList<>();
  
     private MobOrderManager() {}
  
@@ -74,8 +90,11 @@ public final class MobOrderManager {
         return MobOrder.byId(entity.getPersistentData().getInt(KEY_ORDER));
     }
  
-    /** Guarda el modo y lo aplica de inmediato. */
+    /**
+     * Guarda el modo y lo aplica de inmediato. Cambiar el modo a mano termina cualquier ataque directo en curso.
+     */
     public static void setOrder(Mob mob, MobOrder order) {
+        clearDirectTarget(mob);
         mob.getPersistentData().putInt(KEY_ORDER, order.ordinal());
         apply(mob, order);
     }
@@ -85,6 +104,65 @@ public final class MobOrderManager {
         MobOrder next = getOrder(mob).next();
         setOrder(mob, next);
         return next;
+    }
+ 
+    // ---------------------------------------------------------------------------------------------
+    // Ataque directo
+    // ---------------------------------------------------------------------------------------------
+ 
+    @Nullable
+    public static UUID getDirectTargetId(Entity entity) {
+        CompoundTag data = entity.getPersistentData();
+        return data.hasUUID(KEY_DIRECT_TARGET) ? data.getUUID(KEY_DIRECT_TARGET) : null;
+    }
+ 
+    public static String getDirectTargetName(Entity entity) {
+        return entity.getPersistentData().getString(KEY_DIRECT_NAME);
+    }
+ 
+    /** Marca a la víctima y reinstala la IA del mob con la superposición de ataque directo. */
+    public static void setDirectTarget(Mob mob, LivingEntity victim) {
+        CompoundTag data = mob.getPersistentData();
+        data.putUUID(KEY_DIRECT_TARGET, victim.getUUID());
+        data.putString(KEY_DIRECT_NAME, victim.getName().getString());
+        apply(mob, getOrder(mob));
+    }
+ 
+    /** Solo borra los datos; quien llama decide cuándo reinstalar la IA. */
+    public static void clearDirectTarget(Mob mob) {
+        CompoundTag data = mob.getPersistentData();
+        data.remove(KEY_DIRECT_TARGET);
+        data.remove(KEY_DIRECT_NAME);
+    }
+ 
+    /** La víctima si sigue viva, cargada y en la misma dimensión; si no, null. */
+    @Nullable
+    public static LivingEntity resolveDirectTarget(Mob mob) {
+        UUID id = getDirectTargetId(mob);
+        if (id == null || !(mob.level() instanceof ServerLevel level)) return null;
+        Entity found = level.getEntity(id);
+        return found instanceof LivingEntity living && living.isAlive() && !living.isRemoved() ? living : null;
+    }
+ 
+    /**
+     * La víctima murió, desapareció o se descargó: termina el ataque directo. Se llama desde dentro de las metas, así
+     * que la reinstalación de la IA (vuelta al modo previo) se aplaza al final del tick.
+     */
+    public static void finishDirectAttack(Mob mob) {
+        clearDirectTarget(mob);
+        PENDING_REFRESH.add(mob);
+    }
+ 
+    /** Se llama en ServerTickEvent.Post. */
+    public static void flushPendingRefresh() {
+        if (PENDING_REFRESH.isEmpty()) return;
+        List<Mob> mobs = new ArrayList<>(PENDING_REFRESH);
+        PENDING_REFRESH.clear();
+        for (Mob mob : mobs) {
+            if (mob.isAlive() && !mob.isRemoved()) {
+                apply(mob, getOrder(mob));
+            }
+        }
     }
  
     // ---------------------------------------------------------------------------------------------
@@ -120,18 +198,25 @@ public final class MobOrderManager {
     // Reglas de objetivos
     // ---------------------------------------------------------------------------------------------
  
-    /** Aliado = el propio mob, el dueño, o cualquier cosa del mismo dueño (mobs de PokeCraft o mascotas vanilla). */
+    /** Aliado del dueño: él mismo, mobs de PokeCraft con ese dueño o mascotas vanilla de ese dueño. */
+    public static boolean isAlly(@Nullable UUID ownerId, Entity entity) {
+        if (ownerId == null) return false;
+        if (ownerId.equals(entity.getUUID())) return true;
+        if (entity instanceof OwnableEntity ownable && ownerId.equals(ownable.getOwnerUUID())) return true;
+        return isFriendly(entity) && ownerId.equals(getOwnerId(entity));
+    }
+ 
     public static boolean isAllowedTarget(Mob mob, LivingEntity target) {
         if (target == mob || !target.isAlive()) return false;
-        UUID owner = getOwnerId(mob);
-        if (owner == null) return true;
- 
-        if (owner.equals(target.getUUID())) return false;
-        if (target instanceof OwnableEntity ownable && owner.equals(ownable.getOwnerUUID())) return false;
-        return !(isFriendly(target) && owner.equals(getOwnerId(target)));
+        return !isAlly(getOwnerId(mob), target);
     }
  
     public static boolean isTargetAllowed(Mob mob, LivingEntity target, MobOrder order) {
+        // La víctima marcada con el palo siempre es válida, sea cual sea el modo (excepto Quieto, que ignora la orden).
+        UUID direct = getDirectTargetId(mob);
+        if (direct != null && direct.equals(target.getUUID())) {
+            return order != MobOrder.STAY && !isAlly(getOwnerId(mob), target);
+        }
         return order.allowsTargeting() && isAllowedTarget(mob, target);
     }
  
@@ -167,9 +252,18 @@ public final class MobOrderManager {
         mob.getNavigation().stop();
         clearBrainWalkTarget(mob);
  
-        // 4. Instalar las metas del nuevo modo.
+        // 4. Instalar las metas.
         mob.goalSelector.addGoal(0, new TargetGuardGoal(mob, order));
  
+        // 4a. Ataque directo activo (el modo Quieto lo ignora): máxima prioridad, sin metas del modo. Al no
+        //     instalarse FollowOwnerMobGoal no hay teletransporte posible; se avanza con la navegación normal.
+        if (order != MobOrder.STAY && getDirectTargetId(mob) != null) {
+            mob.goalSelector.addGoal(1, new DirectApproachGoal(mob));
+            mob.targetSelector.addGoal(0, new DirectTargetGoal(mob));
+            return;
+        }
+ 
+        // 4b. Metas del modo.
         switch (order) {
             case STAY -> mob.goalSelector.addGoal(0, new StayPutGoal(mob));
             case FOLLOW -> mob.goalSelector.addGoal(3, followGoal(mob));

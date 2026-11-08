@@ -12,5 +12,13 @@
   "pokecraft.order.protect": "protegiendo",
   "pokecraft.order.attack": "atacando",
   "pokecraft.order.free": "libre",
-  "message.pokecraft.order_changed": "[%1$s] ahora está %2$s"
+  "message.pokecraft.order_changed": "[%1$s] ahora está %2$s",
+  "message.pokecraft.list_and": " y ",
+  "message.pokecraft.direct_attack.one": "%1$s atacará a %2$s",
+  "message.pokecraft.direct_attack.many": "%1$s atacarán a %2$s",
+  "message.pokecraft.direct_cancel.one": "%1$s ya no atacará a %2$s",
+  "message.pokecraft.direct_cancel.many": "%1$s ya no atacarán a %2$s",
+  "message.pokecraft.stay_all.one": "%1$s ahora está quieto",
+  "message.pokecraft.stay_all.many": "%1$s ahora están quietos",
+  "message.pokecraft.stay_none": "No hay mobs aliados que dejar quietos"
 }

@@ -1,6 +1,7 @@
 package com.jose.pokecraft.event;
  
 import com.jose.pokecraft.PokeCraftMod;
+import com.jose.pokecraft.ai.DirectAttackManager;
 import com.jose.pokecraft.ai.MobOrder;
 import com.jose.pokecraft.ai.MobOrderManager;
 import com.jose.pokecraft.item.PokeballItem;
@@ -8,6 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -25,6 +27,8 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
+import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -62,6 +66,57 @@ public class ModEventHandlers {
         }
     }
  
+    // ---------------------------------------------------------------------------------------------
+    // Órdenes con el palo en la mano principal
+    // ---------------------------------------------------------------------------------------------
+ 
+    /**
+     * Clic izquierdo con el palo sobre una entidad: ataque directo de todos los aliados. Shift + clic izquierdo:
+     * cancelarlo. El evento NO se cancela, así que el golpe y la animación vanilla del jugador se ejecutan igual.
+     * (Con el palo en la mano secundaria no se hace nada: el ataque siempre usa la mano principal.)
+     */
+    @SubscribeEvent
+    public static void onAttackEntity(AttackEntityEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!player.getMainHandItem().is(Items.STICK)) return;
+ 
+        if (player.isShiftKeyDown()) {
+            DirectAttackManager.cancelDirectAttack(player);
+        } else {
+            DirectAttackManager.startDirectAttack(player, event.getTarget());
+        }
+    }
+ 
+    /** Shift + clic izquierdo con el palo sobre un bloque: también cancela (no hace falta apuntar a una entidad). */
+    @SubscribeEvent
+    public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (event.getAction() != PlayerInteractEvent.LeftClickBlock.Action.START) return;
+        if (player.isShiftKeyDown() && player.getMainHandItem().is(Items.STICK)) {
+            DirectAttackManager.cancelDirectAttack(player);
+        }
+    }
+ 
+    /**
+     * Shift + clic derecho con el palo: "Todos quietos". RightClickItem se dispara una vez por mano; solo se
+     * procesa la principal. Se dispara tanto al aire como apuntando a un bloque o a una entidad (el cliente
+     * pasa de la interacción a "usar objeto" cuando la interacción no se consume).
+     */
+    @SubscribeEvent
+    public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (player.isShiftKeyDown() && player.getMainHandItem().is(Items.STICK)) {
+            DirectAttackManager.stayAll(player);
+        }
+    }
+ 
+    /** Reinstala el modo de los mobs cuyo ataque directo terminó (no se puede hacer dentro del tick de sus metas). */
+    @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
+        MobOrderManager.flushPendingRefresh();
+    }
+ 
     @SubscribeEvent
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (event.getLevel().isClientSide()) return;
@@ -76,6 +131,11 @@ public class ModEventHandlers {
             // Verificar que sea un aliado leal de este jugador
             if (!persistent.contains("PokeCraftFriendly")) return;
             if (!player.getUUID().equals(persistent.getUUID("OwnerUUID"))) return;
+ 
+            // Shift + palo en la mano principal es la orden "Todos quietos" (se resuelve en onRightClickItem, que el
+            // cliente dispara a continuación porque aquí no se consume la interacción). Tiene prioridad sobre
+            // recuperar al mob; para recuperarlo hay que agacharse con cualquier otro objeto o con la mano vacía.
+            if (player.isShiftKeyDown() && mainHand.is(Items.STICK)) return;
  
             // 1. RECUPERAR AL MOB: Solo si el jugador está agachado (Shift + Clic derecho)
             if (player.isShiftKeyDown()) {

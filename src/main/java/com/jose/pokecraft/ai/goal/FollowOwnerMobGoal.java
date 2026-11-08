@@ -4,7 +4,9 @@ import com.jose.pokecraft.ai.MobOrderManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.animal.WaterAnimal;
@@ -86,12 +88,24 @@ public class FollowOwnerMobGoal extends Goal implements ManagedGoal {
  
         // Solo se teletransporta si lleva TELEPORT_CALM_TICKS sin objetivo ni daño dado/recibido. Si el mob
         // acaba de pelear lejos del dueño, vuelve caminando; así no hay bucle de huir y teletransportarse.
+        // Tampoco se teletransporta si el dueño no está en tierra firme (Elytra, nadando, en un bote, volando en
+        // creativo...): el destino sería el aire o el agua y el mob moriría por caída o ahogamiento.
         boolean calm = MobOrderManager.ticksSinceCombat(mob) >= TELEPORT_CALM_TICKS;
-        if (calm && mob.distanceToSqr(owner) >= teleportDistSqr) {
+        if (calm && isOwnerOnSolidGround(owner) && mob.distanceToSqr(owner) >= teleportDistSqr) {
             teleportToOwner();
         } else {
             mob.getNavigation().moveTo(owner, speed);
         }
+    }
+ 
+    private static boolean isOwnerOnSolidGround(Player owner) {
+        if (owner.isFallFlying() || owner.getAbilities().flying) return false;
+        if (owner.isInWaterOrBubble() || owner.isInLava() || owner.isSwimming()) return false;
+ 
+        // Montado: se mira la montura. Un bote flota sobre agua, así que nunca cuenta como tierra firme.
+        Entity base = owner.getVehicle() != null ? owner.getVehicle() : owner;
+        if (base instanceof Boat) return false;
+        return base.onGround();
     }
  
     private void teleportToOwner() {
