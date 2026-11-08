@@ -88,7 +88,10 @@ public class ProtectTargetGoal extends TargetGoal implements ManagedGoal {
  
     @Override
     public void start() {
-        this.targetMob = candidate;
+        // TargetGoal.start() NO asigna el objetivo (lo hacen las subclases vanilla, p. ej. HurtByTargetGoal):
+        // hay que llamar a setTarget explícitamente o el mob nunca ataca.
+        this.mob.setTarget(candidate);
+        this.targetMob = this.mob.getTarget();
         super.start();
     }
 }
