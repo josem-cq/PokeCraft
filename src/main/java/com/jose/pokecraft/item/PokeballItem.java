@@ -1,12 +1,14 @@
 package com.jose.pokecraft.item;
  
 import com.jose.pokecraft.entity.PokeballProjectileEntity;
+import com.jose.pokecraft.pokedex.PokedexManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
@@ -189,7 +191,12 @@ public class PokeballItem extends Item {
         ItemEntity itemEntity = new ItemEntity(target.level(), target.getX(), target.getY(), target.getZ(), filledStack);
         itemEntity.setPickUpDelay(20);
         target.level().addFreshEntity(itemEntity);
- 
+
+        // PokéDex: una captura exitosa desbloquea el mob (se registra donde estaba el mob al capturarlo).
+        if (player instanceof ServerPlayer serverPlayer) {
+            PokedexManager.unlock(serverPlayer, target);
+        }
+
         target.discard();
         return true;
     }
@@ -216,4 +223,3 @@ public class PokeballItem extends Item {
         }
     }
 }
- 

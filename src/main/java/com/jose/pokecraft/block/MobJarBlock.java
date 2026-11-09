@@ -1,16 +1,20 @@
 package com.jose.pokecraft.block;
-
+ 
+import com.jose.pokecraft.item.CapturedMobStats;
 import com.jose.pokecraft.item.PokeballItem;
+import com.jose.pokecraft.pokedex.PokedexManager;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
@@ -28,43 +32,43 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
-
+ 
 public class MobJarBlock extends BaseEntityBlock {
     public static final DirectionProperty HORIZONTAL_FACING = BlockStateProperties.HORIZONTAL_FACING;
     public static final MapCodec<MobJarBlock> CODEC = simpleCodec(MobJarBlock::new);
-
+ 
     public MobJarBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(HORIZONTAL_FACING, Direction.NORTH));
     }
-
+ 
     @Override
     protected MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
-
+ 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(HORIZONTAL_FACING);
     }
-
+ 
     @Nullable
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         return this.defaultBlockState().setValue(HORIZONTAL_FACING, context.getHorizontalDirection().getOpposite());
     }
-
+ 
     @Override
     public RenderShape getRenderShape(BlockState state) {
         return RenderShape.MODEL;
     }
-
+ 
     @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new MobJarBlockEntity(pos, state);
     }
-
+ 
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
@@ -83,34 +87,42 @@ public class MobJarBlock extends BaseEntityBlock {
             }
         }
     }
-
+ 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
         if (level.isClientSide) return InteractionResult.SUCCESS;
-
+ 
         if (level.getBlockEntity(pos) instanceof MobJarBlockEntity jarBE) {
             ItemStack heldItem = player.getItemInHand(player.getUsedItemHand());
-
+ 
             // 1. Insertar mob si está vacío y usa Pokéball
             if (!jarBE.hasStoredEntity() && heldItem.getItem() instanceof PokeballItem) {
                 CustomData customData = heldItem.get(DataComponents.CUSTOM_DATA);
                 if (customData != null && customData.copyTag().contains("CapturedEntity")) {
                     CompoundTag entityTag = customData.copyTag().getCompound("CapturedEntity");
                     jarBE.setStoredEntityTag(entityTag);
-
+ 
+                    // PokéDex: guardar un mob en el frasco lo desbloquea (aunque la bola viniera de otra fuente).
+                    if (player instanceof ServerPlayer serverPlayer) {
+                        EntityType<?> storedType = CapturedMobStats.getEntityType(entityTag);
+                        if (storedType != null) {
+                            PokedexManager.unlock(serverPlayer, storedType, level, pos);
+                        }
+                    }
+ 
                     if (heldItem.has(DataComponents.CUSTOM_NAME)) {
                         jarBE.setCustomName(heldItem.get(DataComponents.CUSTOM_NAME));
                     }
-
+ 
                     if (!player.getAbilities().instabuild) {
                         heldItem.shrink(1);
                     }
-
+ 
                     level.playSound(null, pos, SoundEvents.ITEM_FRAME_ADD_ITEM, SoundSource.BLOCKS, 1.0f, 1.0f);
                     return InteractionResult.SUCCESS;
                 }
             }
-
+ 
             // 2. Extraer mob si tiene entidad y la mano está vacía (con Shift)
             if (jarBE.hasStoredEntity() && player.isShiftKeyDown() && heldItem.isEmpty()) {
                 CompoundTag entityTag = jarBE.getStoredEntityTag();
@@ -122,30 +134,30 @@ public class MobJarBlock extends BaseEntityBlock {
                         pokeballItem = foundItem;
                     }
                 }
-
+ 
                 ItemStack filledPokeball = new ItemStack(pokeballItem);
                 CompoundTag tag = filledPokeball.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
                 tag.put("CapturedEntity", entityTag);
                 filledPokeball.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-
+ 
                 if (jarBE.hasCustomName()) {
                     filledPokeball.set(DataComponents.CUSTOM_NAME, jarBE.getCustomName());
                 }
-
+ 
                 if (!player.addItem(filledPokeball)) {
                     player.drop(filledPokeball, false);
                 }
-
+ 
                 jarBE.setStoredEntityTag(null);
                 jarBE.setCustomName(null);
-
+ 
                 level.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 1.0f, 1.0f);
                 return InteractionResult.SUCCESS;
             }
         }
         return InteractionResult.PASS;
     }
-
+ 
     @Override
     public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
         if (!level.isClientSide) {
@@ -167,7 +179,7 @@ public class MobJarBlock extends BaseEntityBlock {
         }
         return super.playerWillDestroy(level, pos, state, player);
     }
-
+ 
     @Override
     public ItemStack getCloneItemStack(net.minecraft.world.level.LevelReader level, BlockPos pos, BlockState state) {
         ItemStack stack = super.getCloneItemStack(level, pos, state);
