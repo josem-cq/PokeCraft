@@ -9,10 +9,16 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.entity.EntityTypeTest;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
  
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
  
 /**
@@ -23,11 +29,80 @@ import java.util.UUID;
  * Solo se llama desde el servidor.
  */
 public final class DirectAttackManager {
+    /** Alcance máximo del ataque directo hacia donde mira el jugador (bloques). */
+    public static final double LOOK_RANGE = 256.0D;
+    /** Mínimo de ticks entre dos peticiones de largo alcance del mismo jugador (el rayo no es gratis). */
+    private static final int REQUEST_COOLDOWN_TICKS = 4;
+    private static final String KEY_LAST_REQUEST = "PokeCraftLastDirectRequest";
+ 
     private DirectAttackManager() {}
  
     // ---------------------------------------------------------------------------------------------
     // Ataque directo
     // ---------------------------------------------------------------------------------------------
+ 
+    /**
+     * Ataque directo de largo alcance: traza un rayo desde los ojos del jugador hasta {@link #LOOK_RANGE} bloques y
+     * ataca a la primera entidad viva que encuentre. Los bloques sólidos tapan la visión. Los aliados capturados
+     * se atraviesan (no estorban la mira) y los ArmorStand se ignoran.
+     * Solo alcanza entidades cargadas en el servidor, así que en la práctica el límite es también la distancia
+     * de renderizado/simulación del servidor.
+     */
+    public static void startDirectAttackFromLook(ServerPlayer player) {
+        long now = player.level().getGameTime();
+        var data = player.getPersistentData();
+        if (now - data.getLong(KEY_LAST_REQUEST) < REQUEST_COOLDOWN_TICKS) return;
+        data.putLong(KEY_LAST_REQUEST, now);
+ 
+        LivingEntity target = findLookTarget(player);
+        if (target != null) {
+            startDirectAttack(player, target);
+        }
+    }
+ 
+    @Nullable
+    private static LivingEntity findLookTarget(ServerPlayer player) {
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getViewVector(1.0F);
+        Vec3 end = eye.add(look.scale(LOOK_RANGE));
+ 
+        // Un bloque sólido antes de la entidad la tapa: el rayo se acorta hasta él.
+        HitResult blockHit = player.level().clip(new ClipContext(
+                eye, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+        double limitSqr = LOOK_RANGE * LOOK_RANGE;
+        if (blockHit.getType() != HitResult.Type.MISS) {
+            limitSqr = blockHit.getLocation().distanceToSqr(eye);
+        }
+ 
+        AABB search = player.getBoundingBox().expandTowards(look.scale(LOOK_RANGE)).inflate(2.0D);
+        UUID ownerId = player.getUUID();
+ 
+        LivingEntity best = null;
+        double bestSqr = limitSqr;
+        for (LivingEntity candidate : player.level().getEntitiesOfClass(LivingEntity.class, search,
+                e -> e != player && e.isAlive() && !e.isSpectator()
+                        && !(e instanceof ArmorStand) && !MobOrderManager.isAlly(ownerId, e))) {
+ 
+            // Asistencia de puntería: a 200 bloques un mob mide un par de píxeles, así que la caja de impacto
+            // crece con la distancia (+1 bloque cada 100). Cerca es prácticamente la caja real.
+            double distance = Math.sqrt(candidate.distanceToSqr(eye));
+            AABB box = candidate.getBoundingBox().inflate(0.25D + distance * 0.01D);
+ 
+            double hitSqr;
+            if (box.contains(eye)) {
+                hitSqr = 0.0D;
+            } else {
+                Optional<Vec3> hit = box.clip(eye, end);
+                if (hit.isEmpty()) continue;
+                hitSqr = eye.distanceToSqr(hit.get());
+            }
+            if (hitSqr < bestSqr) {
+                bestSqr = hitSqr;
+                best = candidate;
+            }
+        }
+        return best;
+    }
  
     public static void startDirectAttack(ServerPlayer player, Entity clicked) {
         if (!(clicked instanceof LivingEntity victim) || victim instanceof ArmorStand || !victim.isAlive()) return;

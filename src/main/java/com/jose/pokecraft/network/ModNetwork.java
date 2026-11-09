@@ -18,6 +18,18 @@ public class ModNetwork {
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
         registrar.playToServer(CancelDirectAttackPayload.TYPE, CancelDirectAttackPayload.STREAM_CODEC, ModNetwork::handleCancel);
+        registrar.playToServer(DirectAttackRequestPayload.TYPE, DirectAttackRequestPayload.STREAM_CODEC, ModNetwork::handleDirectAttack);
+    }
+ 
+    private static void handleDirectAttack(DirectAttackRequestPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            // Se revalida en el servidor: palo en la mano principal y sin Shift (con Shift es "cancelar").
+            if (context.player() instanceof ServerPlayer player
+                    && !player.isShiftKeyDown()
+                    && player.getMainHandItem().is(Items.STICK)) {
+                DirectAttackManager.startDirectAttackFromLook(player);
+            }
+        });
     }
  
     private static void handleCancel(CancelDirectAttackPayload payload, IPayloadContext context) {
@@ -31,4 +43,3 @@ public class ModNetwork {
         });
     }
 }
- 
