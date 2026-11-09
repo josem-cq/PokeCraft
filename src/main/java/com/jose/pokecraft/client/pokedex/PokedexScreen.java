@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
@@ -88,6 +89,10 @@ public class PokedexScreen extends Screen {
     }
  
     private final Screen parent;
+    /** Variante de creativo: todo desbloqueado, sin datos de registro y los clics entregan huevos al cursor. */
+    private final boolean creative;
+    /** Ítem que "sostiene" el cursor en la variante de creativo (se devuelve al inventario creativo al cerrar). */
+    private ItemStack carried = ItemStack.EMPTY;
     private final ItemStack swordIcon = new ItemStack(Items.IRON_SWORD);
     private final List<MobEntry> catalog;
     private final List<Tab> tabs = new ArrayList<>();
@@ -117,9 +122,21 @@ public class PokedexScreen extends Screen {
     private int cols = 1, cellW = MIN_CELL_W, visibleRows = 1;
  
     public PokedexScreen(Screen parent) {
+        this(parent, false);
+    }
+ 
+    public PokedexScreen(Screen parent, boolean creative) {
         super(Component.translatable("gui.pokecraft.pokedex"));
         this.parent = parent;
+        this.creative = creative;
         this.catalog = MobCatalog.entries();
+ 
+        // Creativo: se recoge el ítem que ya tuviera el cursor en el inventario creativo (solo en su pantalla propia,
+        // porque ahí el cursor es 100% cliente; en un menú normal desincronizaría con el servidor).
+        if (creative && parent instanceof CreativeModeInventoryScreen creativeScreen) {
+            carried = creativeScreen.getMenu().getCarried().copy();
+            creativeScreen.getMenu().setCarried(ItemStack.EMPTY);
+        }
  
         // Pestañas: Búsqueda, luego "minecraft" y el resto de mods por orden alfabético.
         tabs.add(new Tab(null, Component.translatable("pokecraft.pokedex.tab.search")));
@@ -144,7 +161,11 @@ public class PokedexScreen extends Screen {
         stateFilter = new Dropdown<>(Component.translatable("pokecraft.pokedex.filter.state"), states, true, () -> refresh(true));
  
         List<Dropdown.Option<SortKey>> sorts = new ArrayList<>();
-        for (SortKey key : SortKey.values()) sorts.add(new Dropdown.Option<>(key, key.label()));
+        for (SortKey key : SortKey.values()) {
+            // Sin progreso que consultar: "Estado de bloqueo" y "Fecha de descubierto" no tienen sentido en creativo.
+            if (creative && (key == SortKey.STATE || key == SortKey.DISCOVERED)) continue;
+            sorts.add(new Dropdown.Option<>(key, key.label()));
+        }
         sortDropdown = new Dropdown<>(Component.translatable("pokecraft.pokedex.sort"), sorts, false, () -> refresh(true));
         sortDropdown.select(SortKey.NAME);
     }
@@ -205,14 +226,14 @@ public class PokedexScreen extends Screen {
             modFilter.setBounds(fx, rowB, fw, 16);
             fx += fw + 4;
         }
-        stateFilter.setBounds(fx, rowB, fw, 16);
+        if (!creative) stateFilter.setBounds(fx, rowB, fw, 16);
     }
  
     private List<Dropdown<?>> visibleDropdowns() {
         List<Dropdown<?>> list = new ArrayList<>();
         list.add(kindFilter);
         if (tabs.get(activeTab).isSearch()) list.add(modFilter);
-        list.add(stateFilter);
+        if (!creative) list.add(stateFilter);
         list.add(sortDropdown);
         return list;
     }
@@ -229,6 +250,11 @@ public class PokedexScreen extends Screen {
         return Component.translatable(ascending ? "pokecraft.pokedex.asc" : "pokecraft.pokedex.desc");
     }
  
+    /** En creativo todo está desbloqueado; en supervivencia depende del progreso del jugador. */
+    private boolean isUnlocked(MobEntry entry) {
+        return creative || ClientPokedexData.isUnlocked(entry.id());
+    }
+ 
     /** Llamado cuando llegan descubrimientos nuevos con la pantalla ya abierta. */
     public void onDataUpdated() {
         refresh(false);
@@ -237,6 +263,11 @@ public class PokedexScreen extends Screen {
     @Override
     public void onClose() {
         minecraft.setScreen(parent);
+        // Al volver al inventario creativo, el ítem del cursor vuelve con el jugador.
+        if (creative && parent instanceof CreativeModeInventoryScreen creativeScreen) {
+            creativeScreen.getMenu().setCarried(carried);
+            carried = ItemStack.EMPTY;
+        }
     }
  
     @Override
@@ -259,7 +290,7 @@ public class PokedexScreen extends Screen {
             if (!tab.isSearch() && !entry.namespace().equals(tab.namespace())) continue;
             source.add(entry);
             tabTotal++;
-            if (ClientPokedexData.isUnlocked(entry.id())) tabUnlocked++;
+            if (isUnlocked(entry)) tabUnlocked++;
         }
  
         String query = searchBox == null ? "" : searchBox.getValue().trim().toLowerCase(Locale.ROOT);
@@ -267,7 +298,7 @@ public class PokedexScreen extends Screen {
  
         List<MobEntry> result = new ArrayList<>();
         for (MobEntry entry : source) {
-            boolean unlocked = ClientPokedexData.isUnlocked(entry.id());
+            boolean unlocked = isUnlocked(entry);
  
             // Restricción estricta: una búsqueda con texto NUNCA encuentra ni muestra mobs bloqueados.
             if (searching) {
@@ -299,10 +330,10 @@ public class PokedexScreen extends Screen {
             case NAME -> byName;
             case KIND -> Comparator.comparingInt(e -> e.kind().ordinal());
             case MOD -> Comparator.comparing((MobEntry e) -> MobCatalog.modName(e.namespace()), String.CASE_INSENSITIVE_ORDER);
-            case STATE -> Comparator.comparingInt(e -> ClientPokedexData.isUnlocked(e.id()) ? 0 : 1);
-            case HEALTH -> Comparator.comparingDouble(e -> ClientPokedexData.isUnlocked(e.id()) ? e.health() : 0);
-            case ARMOR -> Comparator.comparingDouble(e -> ClientPokedexData.isUnlocked(e.id()) ? e.armor() : 0);
-            case DAMAGE -> Comparator.comparingDouble(e -> ClientPokedexData.isUnlocked(e.id()) ? e.damage() : 0);
+            case STATE -> Comparator.comparingInt(e -> isUnlocked(e) ? 0 : 1);
+            case HEALTH -> Comparator.comparingDouble(e -> isUnlocked(e) ? e.health() : 0);
+            case ARMOR -> Comparator.comparingDouble(e -> isUnlocked(e) ? e.armor() : 0);
+            case DAMAGE -> Comparator.comparingDouble(e -> isUnlocked(e) ? e.damage() : 0);
             case DISCOVERED -> Comparator.comparingLong(e -> {
                 ClientPokedexData.Discovery d = ClientPokedexData.get(e.id());
                 return d == null ? 0L : d.tick();
@@ -311,7 +342,7 @@ public class PokedexScreen extends Screen {
         if (!ascending) inner = inner.reversed();
  
         if (key.lockedLast) {
-            Comparator<MobEntry> unlockedFirst = Comparator.comparingInt(e -> ClientPokedexData.isUnlocked(e.id()) ? 0 : 1);
+            Comparator<MobEntry> unlockedFirst = Comparator.comparingInt(e -> isUnlocked(e) ? 0 : 1);
             return unlockedFirst.thenComparing(inner).thenComparing(byName);
         }
         return inner.thenComparing(byName);
@@ -358,7 +389,9 @@ public class PokedexScreen extends Screen {
         renderTabs(g, mouseX, mouseY);
  
         g.drawString(font, title, panelX + PAD, panelY + 6, PokedexUi.TEXT_DARK, false);
-        Component counter = Component.translatable("pokecraft.pokedex.registered_count", tabUnlocked, tabTotal);
+        Component counter = creative
+                ? Component.translatable("pokecraft.pokedex.creative_count", tabTotal)
+                : Component.translatable("pokecraft.pokedex.registered_count", tabUnlocked, tabTotal);
         g.drawString(font, counter, panelX + panelW - PAD - font.width(counter), panelY + 6, PokedexUi.TEXT_DARK, false);
     }
  
@@ -404,17 +437,28 @@ public class PokedexScreen extends Screen {
  
         Dropdown<?> open = openDropdown();
         if (open != null) {
-            open.renderPopup(g, font, mouseX, mouseY);
-            return; // con un menú abierto no se muestran tooltips por debajo
+            open.renderPopup(g, font, mouseX, mouseY); // con un menú abierto no se muestran tooltips por debajo
+        } else {
+            MobEntry hovered = entryAt(mouseX, mouseY);
+            if (hovered != null) {
+                g.renderComponentTooltip(font, buildTooltip(hovered), mouseX, mouseY);
+            } else {
+                Tab tab = tabAtMouse(mouseX, mouseY);
+                if (tab != null) g.renderTooltip(font, tab.label(), mouseX, mouseY);
+            }
         }
  
-        MobEntry hovered = entryAt(mouseX, mouseY);
-        if (hovered != null) {
-            g.renderComponentTooltip(font, buildTooltip(hovered), mouseX, mouseY);
-        } else {
-            Tab tab = tabAtMouse(mouseX, mouseY);
-            if (tab != null) g.renderTooltip(font, tab.label(), mouseX, mouseY);
-        }
+        renderCarried(g, mouseX, mouseY);
+    }
+ 
+    /** Ítem pegado al cursor (creativo), por encima de todo, igual que en el inventario vanilla. */
+    private void renderCarried(GuiGraphics g, int mouseX, int mouseY) {
+        if (carried.isEmpty()) return;
+        g.pose().pushPose();
+        g.pose().translate(0.0F, 0.0F, 450.0F);
+        g.renderItem(carried, mouseX - 8, mouseY - 8);
+        g.renderItemDecorations(font, carried, mouseX - 8, mouseY - 8);
+        g.pose().popPose();
     }
  
     private void renderGrid(GuiGraphics g, int mouseX, int mouseY) {
@@ -423,7 +467,7 @@ public class PokedexScreen extends Screen {
         if (filtered.isEmpty()) {
             Component message = Component.translatable("pokecraft.pokedex.empty");
             g.drawCenteredString(font, message, gridX + gridW / 2, gridY + gridH / 2 - 8, 0xFFAAAAAA);
-            if (!searchBox.getValue().isBlank()) {
+            if (!creative && !searchBox.getValue().isBlank()) {
                 g.drawCenteredString(font, Component.translatable("pokecraft.pokedex.empty_search_hint"),
                         gridX + gridW / 2, gridY + gridH / 2 + 4, 0xFF777777);
             }
@@ -447,7 +491,7 @@ public class PokedexScreen extends Screen {
     }
  
     private void renderCell(GuiGraphics g, MobEntry entry, int x, int y, boolean hover) {
-        boolean unlocked = ClientPokedexData.isUnlocked(entry.id());
+        boolean unlocked = isUnlocked(entry);
         g.fill(x + 1, y + 1, x + cellW - 1, y + CELL_H - 1, hover ? 0xFF5C5C6E : 0xFF444444);
  
         // Icono: huevo del mob si está desbloqueado; interrogación si no.
@@ -544,9 +588,9 @@ public class PokedexScreen extends Screen {
  
     private List<Component> buildTooltip(MobEntry entry) {
         List<Component> lines = new ArrayList<>();
-        ClientPokedexData.Discovery discovery = ClientPokedexData.get(entry.id());
+        ClientPokedexData.Discovery discovery = creative ? null : ClientPokedexData.get(entry.id());
  
-        if (discovery == null) {
+        if (!creative && discovery == null) {
             // Bloqueado: no se revela nada del mob.
             lines.add(Component.translatable("pokecraft.pokedex.locked").withStyle(ChatFormatting.GRAY));
             lines.add(Component.translatable("pokecraft.pokedex.locked_hint").withStyle(ChatFormatting.DARK_GRAY));
@@ -563,6 +607,9 @@ public class PokedexScreen extends Screen {
                 .withStyle(ChatFormatting.AQUA));
         lines.add(Component.translatable("pokecraft.pokedex.tooltip.damage", number(entry.damage()))
                 .withStyle(ChatFormatting.GOLD));
+        // En creativo no hay "primer registro": se omiten lugar, dimensión y fecha.
+        if (creative) return lines;
+ 
         lines.add(Component.empty());
         lines.add(Component.translatable("pokecraft.pokedex.tooltip.registered").withStyle(ChatFormatting.YELLOW));
         lines.add(Component.translatable("pokecraft.pokedex.tooltip.position", discovery.x(), discovery.y(), discovery.z())
@@ -641,6 +688,15 @@ public class PokedexScreen extends Screen {
             if (dropdown.mouseClicked(mouseX, mouseY, button)) return true;
         }
  
+        // 2b. Creativo: clic sobre una casilla de mob (huevo al cursor, descartar, acumular).
+        if (creative) {
+            MobEntry cell = entryAt(mouseX, mouseY);
+            if (cell != null) {
+                handleCreativeClick(cell, button);
+                return true;
+            }
+        }
+ 
         if (button == 0) {
             // 3. Pestañas y sus flechas.
             if (mouseY >= tabY() && mouseY < panelY) {
@@ -670,6 +726,47 @@ public class PokedexScreen extends Screen {
         }
  
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+ 
+    /**
+     * Reglas del inventario creativo vanilla sobre una casilla (huevo de aparición del mob):
+     *  - Cursor vacío: clic izq. = 1 huevo; Shift+clic izq. o rueda = stack completo.
+     *  - Mismo ítem en el cursor: clic izq. +1 (Shift o rueda = stack completo); clic der. -1.
+     *  - Otro ítem en el cursor: clic izq. lo descarta; clic der. descarta 1 unidad.
+     */
+    private void handleCreativeClick(MobEntry entry, int button) {
+        ItemStack egg = entry.icon();
+        boolean hasEgg = !egg.isEmpty();
+        boolean same = hasEgg && !carried.isEmpty() && ItemStack.isSameItemSameComponents(carried, egg);
+ 
+        if (button == 1) { // clic derecho: quita 1 unidad del cursor (sea el mismo ítem u otro)
+            if (!carried.isEmpty()) {
+                carried.shrink(1);
+                if (carried.isEmpty()) carried = ItemStack.EMPTY;
+            }
+            return;
+        }
+ 
+        if (button == 2) { // rueda: stack completo, solo con el cursor vacío o con ese mismo ítem
+            if (hasEgg && (carried.isEmpty() || same)) {
+                carried = egg.copyWithCount(egg.getMaxStackSize());
+            }
+            return;
+        }
+ 
+        if (button != 0) return;
+ 
+        if (same) {
+            if (hasShiftDown()) {
+                carried.setCount(carried.getMaxStackSize());
+            } else if (carried.getCount() < carried.getMaxStackSize()) {
+                carried.grow(1);
+            }
+        } else if (!carried.isEmpty()) {
+            carried = ItemStack.EMPTY; // ítem distinto: se descarta el del cursor
+        } else if (hasEgg) {
+            carried = egg.copyWithCount(hasShiftDown() ? egg.getMaxStackSize() : 1);
+        }
     }
  
     private void scrollToMouse(double mouseY) {

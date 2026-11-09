@@ -4,6 +4,8 @@ import com.jose.pokecraft.PokeCraftMod;
 import com.jose.pokecraft.client.pokedex.ClientPokedexData;
 import com.jose.pokecraft.client.pokedex.MobCatalog;
 import com.jose.pokecraft.client.pokedex.PokedexButton;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -15,11 +17,26 @@ import net.neoforged.neoforge.client.event.ScreenEvent;
 @EventBusSubscriber(modid = PokeCraftMod.MOD_ID, value = Dist.CLIENT)
 public class ClientPokedexEvents {
  
-    /** Solo el inventario de supervivencia (InventoryScreen); el creativo es otra pantalla distinta. */
+    /**
+     * Inventario de supervivencia (InventoryScreen) e inventario creativo (CreativeModeInventoryScreen, otra pantalla
+     * distinta): el botón decide solo qué variante de la PokéDex abre y, en creativo, cuándo es visible.
+     */
     @SubscribeEvent
     public static void onScreenInit(ScreenEvent.Init.Post event) {
         if (event.getScreen() instanceof InventoryScreen inventory) {
             event.addListener(new PokedexButton(inventory));
+        } else if (event.getScreen() instanceof CreativeModeInventoryScreen creativeInventory) {
+            event.addListener(new PokedexButton(creativeInventory));
+        }
+    }
+ 
+    /** Muestra/oculta el botón del inventario creativo según la pestaña activa (se evalúa antes de dibujar). */
+    @SubscribeEvent
+    public static void onScreenRender(ScreenEvent.Render.Pre event) {
+        if (event.getScreen() instanceof CreativeModeInventoryScreen creativeInventory) {
+            for (GuiEventListener child : creativeInventory.children()) {
+                if (child instanceof PokedexButton button) button.updateVisibility();
+            }
         }
     }
  
@@ -30,4 +47,3 @@ public class ClientPokedexEvents {
         MobCatalog.invalidate();
     }
 }
- 

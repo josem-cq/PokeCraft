@@ -1,38 +1,105 @@
 package com.jose.pokecraft.client.pokedex;
  
 import com.jose.pokecraft.network.PokedexRequestPayload;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.network.PacketDistributor;
  
+import java.lang.reflect.Method;
+ 
 /**
- * Botón de la PokéDex en el inventario de supervivencia, a la derecha del libro de recetas vanilla.
- * Al pulsarlo pide los descubrimientos al servidor; la pantalla se abre cuando llegan (ClientPokedexHandler).
+ * Botón de la PokéDex.
+ *  - Supervivencia (InventoryScreen): a la derecha del libro de recetas vanilla. Pide los descubrimientos al servidor;
+ *    la pantalla se abre cuando llegan (ClientPokedexHandler).
+ *  - Creativo (CreativeModeInventoryScreen): solo en la pestaña "Inventario de supervivencia", a la derecha del
+ *    personaje junto a los slots de pantalones y botas. Abre la PokéDex de creativo directamente (todo desbloqueado,
+ *    no necesita datos del servidor).
  */
 public class PokedexButton extends Button {
     /** Icono provisional: la perla de ender (minecraft:item/ender_pearl). Cámbialo aquí por tu propia textura. */
     private final ItemStack icon = new ItemStack(Items.ENDER_PEARL);
  
-    private final InventoryScreen screen;
+    private final AbstractContainerScreen<?> screen;
+    private final boolean creative;
  
-    public PokedexButton(InventoryScreen screen) {
+    public PokedexButton(AbstractContainerScreen<?> screen) {
         // El mensaje va vacío para que el botón vanilla no pinte texto encima del icono.
-        super(screen.getGuiLeft() + 126, screen.height / 2 - 22, 20, 18, Component.empty(),
-                button -> PacketDistributor.sendToServer(PokedexRequestPayload.INSTANCE), DEFAULT_NARRATION);
+        super(0, 0, 20, 18, Component.empty(), button -> open(screen), DEFAULT_NARRATION);
         this.screen = screen;
+        this.creative = screen instanceof CreativeModeInventoryScreen;
+        reposition();
         setTooltip(Tooltip.create(Component.translatable("gui.pokecraft.pokedex")));
+    }
+ 
+    private static void open(AbstractContainerScreen<?> screen) {
+        if (screen instanceof CreativeModeInventoryScreen) {
+            Minecraft.getInstance().setScreen(new PokedexScreen(screen, true));
+        } else {
+            PacketDistributor.sendToServer(PokedexRequestPayload.INSTANCE);
+        }
+    }
+ 
+    private void reposition() {
+        if (creative) {
+            // Slots de armadura de la pestaña de inventario creativo: pantalones/botas en x=108 (y=6 y y=33);
+            // el personaje queda entre x=73..105. El botón va justo a la derecha de esos slots, centrado entre ambos.
+            setPosition(screen.getGuiLeft() + 129, screen.getGuiTop() + 19);
+        } else {
+            setPosition(screen.getGuiLeft() + 126, screen.height / 2 - 22);
+        }
+    }
+ 
+    /**
+     * En creativo el botón solo existe en la pestaña de inventario (cambiar de pestaña no re-inicializa la pantalla).
+     * AbstractWidget.render es final, así que la visibilidad se actualiza cada frame desde ClientPokedexEvents
+     * (ScreenEvent.Render.Pre); con visible=false el widget ni se dibuja ni recibe clics ni muestra tooltip.
+     */
+    public void updateVisibility() {
+        if (creative) visible = isCreativeInventoryTab();
     }
  
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // El libro de recetas desplaza la pantalla al abrirse sin reinicializarla: se recoloca cada frame.
-        setPosition(screen.getGuiLeft() + 126, screen.height / 2 - 22);
+        reposition();
         super.renderWidget(graphics, mouseX, mouseY, partialTick);
         graphics.renderItem(icon, getX() + 2, getY() + 1);
+    }
+ 
+    private static Method inventoryTabMethod;
+    private static boolean inventoryTabMethodLookedUp;
+ 
+    /** ¿Está abierta la pestaña "Inventario de supervivencia" del inventario creativo? */
+    private boolean isCreativeInventoryTab() {
+        // 1) Si la pantalla expone isInventoryOpen() (privado o público según versión) se usa tal cual.
+        if (!inventoryTabMethodLookedUp) {
+            inventoryTabMethodLookedUp = true;
+            try {
+                inventoryTabMethod = CreativeModeInventoryScreen.class.getDeclaredMethod("isInventoryOpen");
+                inventoryTabMethod.setAccessible(true);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                inventoryTabMethod = null;
+            }
+        }
+        if (inventoryTabMethod != null) {
+            try {
+                return (boolean) inventoryTabMethod.invoke(screen);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                inventoryTabMethod = null;
+            }
+        }
+        // 2) Respaldo: solo esta pestaña tiene el slot de "tirar ítem" en (173, 112).
+        for (Slot slot : screen.getMenu().slots) {
+            if (slot.x == 173 && slot.y == 112) return true;
+        }
+        return false;
     }
 }

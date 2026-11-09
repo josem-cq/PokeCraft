@@ -27,6 +27,7 @@
   "pokecraft.pokedex.search": "Buscar",
   "pokecraft.pokedex.search_hint": "Buscar mob...",
   "pokecraft.pokedex.registered_count": "Registrados: %1$d/%2$d",
+  "pokecraft.pokedex.creative_count": "Mobs: %1$d",
   "pokecraft.pokedex.kind.passive": "Pasivo",
   "pokecraft.pokedex.kind.neutral": "Neutral",
   "pokecraft.pokedex.kind.hostile": "Hostil",
