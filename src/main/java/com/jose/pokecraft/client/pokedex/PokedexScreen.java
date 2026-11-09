@@ -7,6 +7,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
@@ -49,6 +50,10 @@ public class PokedexScreen extends Screen {
     private static final int PAD = 8;
     private static final int SCROLLBAR_W = 6;
     private static final float STATS_SCALE = 0.72F;
+    // Bloque de inventario del jugador (creativo): 3 filas + hotbar, como en el inventario vanilla.
+    private static final int INV_W = 9 * 18 + 14;
+    private static final int INV_H = 7 + 3 * 18 + 4 + 18 + 7;
+    private static final int INV_GAP = 6;
  
     public enum LockState {
         LOCKED("locked"), UNLOCKED("unlocked");
@@ -118,6 +123,7 @@ public class PokedexScreen extends Screen {
  
     // Geometría calculada en init()
     private int panelX, panelY, panelW, panelH;
+    private int invX, invY;
     private int gridX, gridY, gridW, gridH;
     private int cols = 1, cellW = MIN_CELL_W, visibleRows = 1;
  
@@ -177,9 +183,18 @@ public class PokedexScreen extends Screen {
     @Override
     protected void init() {
         panelW = Mth.clamp(width - 24, 280, 420);
-        panelH = Mth.clamp(height - 56, 190, 260);
         panelX = (width - panelW) / 2;
-        panelY = Mth.clamp((height - panelH) / 2 + 10, TAB_H + 4, Math.max(TAB_H + 4, height - panelH - 4));
+        if (creative) {
+            // La PokéDex sube y deja sitio debajo para el inventario del jugador (27 slots + hotbar).
+            panelH = Mth.clamp(height - TAB_H - INV_GAP - INV_H - 12, 120, 260);
+            int total = TAB_H + panelH + INV_GAP + INV_H;
+            panelY = Math.max(4, (height - total) / 2) + TAB_H;
+            invX = (width - INV_W) / 2;
+            invY = panelY + panelH + INV_GAP;
+        } else {
+            panelH = Mth.clamp(height - 56, 190, 260);
+            panelY = Mth.clamp((height - panelH) / 2 + 10, TAB_H + 4, Math.max(TAB_H + 4, height - panelH - 4));
+        }
  
         int rowA = panelY + 18;
         int rowB = rowA + 22;
@@ -434,6 +449,7 @@ public class PokedexScreen extends Screen {
         }
  
         renderGrid(g, mouseX, mouseY);
+        if (creative) renderInventory(g, mouseX, mouseY);
  
         Dropdown<?> open = openDropdown();
         if (open != null) {
@@ -443,12 +459,97 @@ public class PokedexScreen extends Screen {
             if (hovered != null) {
                 g.renderComponentTooltip(font, buildTooltip(hovered), mouseX, mouseY);
             } else {
+                ItemStack hoveredItem = creative ? inventoryStackAt(mouseX, mouseY) : ItemStack.EMPTY;
                 Tab tab = tabAtMouse(mouseX, mouseY);
-                if (tab != null) g.renderTooltip(font, tab.label(), mouseX, mouseY);
+                if (!hoveredItem.isEmpty()) g.renderTooltip(font, hoveredItem, mouseX, mouseY);
+                else if (tab != null) g.renderTooltip(font, tab.label(), mouseX, mouseY);
             }
         }
  
         renderCarried(g, mouseX, mouseY);
+    }
+ 
+    // ---------------------------------------------------------------------------------------------
+    // Inventario del jugador (solo creativo, solo lectura): muestra dónde caerán los huevos con Shift+clic
+    // ---------------------------------------------------------------------------------------------
+ 
+    /** Posición (esquina superior izquierda) de la casilla del inventario del jugador con ese índice (0-8 hotbar, 9-35). */
+    private int invSlotX(int index) {
+        return invX + 7 + (index % 9) * 18;
+    }
+ 
+    private int invSlotY(int index) {
+        if (index < 9) return invY + 7 + 3 * 18 + 4;          // hotbar, separada 4 px
+        return invY + 7 + ((index - 9) / 9) * 18;             // 3 filas principales
+    }
+ 
+    private void renderInventory(GuiGraphics g, int mouseX, int mouseY) {
+        if (minecraft == null || minecraft.player == null) return;
+        Inventory inventory = minecraft.player.getInventory();
+        PokedexUi.raised(g, invX, invY, INV_W, INV_H, PokedexUi.PANEL_FILL);
+        for (int index = 0; index < 36; index++) {
+            int x = invSlotX(index);
+            int y = invSlotY(index);
+            PokedexUi.inset(g, x, y, 18, 18, PokedexUi.BUTTON_FILL);
+            ItemStack stack = inventory.getItem(index);
+            if (!stack.isEmpty()) {
+                g.renderItem(stack, x + 1, y + 1);
+                g.renderItemDecorations(font, stack, x + 1, y + 1);
+            }
+            if (mouseX >= x && mouseX < x + 18 && mouseY >= y && mouseY < y + 18 && openDropdown() == null) {
+                g.fill(x + 1, y + 1, x + 17, y + 17, 0x80FFFFFF);
+            }
+        }
+    }
+ 
+    private ItemStack inventoryStackAt(int mouseX, int mouseY) {
+        if (minecraft == null || minecraft.player == null) return ItemStack.EMPTY;
+        for (int index = 0; index < 36; index++) {
+            int x = invSlotX(index);
+            int y = invSlotY(index);
+            if (mouseX >= x && mouseX < x + 18 && mouseY >= y && mouseY < y + 18) {
+                return minecraft.player.getInventory().getItem(index);
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+ 
+    /**
+     * Shift+clic: manda un stack completo del huevo al inventario del jugador en este orden: hotbar de izquierda a
+     * derecha y después las 3 filas principales (fila de arriba primero, de izquierda a derecha). Primero completa los
+     * stacks que ya tiene del mismo huevo y luego ocupa las casillas vacías. Se sincroniza con el servidor igual
+     * que el inventario creativo vanilla (paquete de "set creative slot").
+     */
+    private void giveToInventory(ItemStack egg) {
+        if (minecraft == null || minecraft.player == null || minecraft.gameMode == null) return;
+        if (!minecraft.gameMode.hasInfiniteItems()) return;
+        Inventory inventory = minecraft.player.getInventory();
+        ItemStack remaining = egg.copyWithCount(egg.getMaxStackSize());
+ 
+        // Orden de índices de Inventory: 0-8 hotbar, 9-35 principal (ya va de izquierda a derecha, fila a fila).
+        for (int index = 0; index < 36 && !remaining.isEmpty(); index++) {
+            ItemStack existing = inventory.getItem(index);
+            if (existing.isEmpty() || !ItemStack.isSameItemSameComponents(existing, remaining)) continue;
+            int room = existing.getMaxStackSize() - existing.getCount();
+            if (room <= 0) continue;
+            int moved = Math.min(room, remaining.getCount());
+            existing.grow(moved);
+            remaining.shrink(moved);
+            syncInventorySlot(inventory, index);
+        }
+        for (int index = 0; index < 36 && !remaining.isEmpty(); index++) {
+            if (!inventory.getItem(index).isEmpty()) continue;
+            int moved = Math.min(remaining.getMaxStackSize(), remaining.getCount());
+            inventory.setItem(index, remaining.copyWithCount(moved));
+            remaining.shrink(moved);
+            syncInventorySlot(inventory, index);
+        }
+    }
+ 
+    /** Envía al servidor el contenido de una casilla (id de slot del menú del jugador: hotbar 36-44, principal 9-35). */
+    private void syncInventorySlot(Inventory inventory, int index) {
+        int menuSlot = index < 9 ? 36 + index : index;
+        minecraft.gameMode.handleCreativeModeItemAdd(inventory.getItem(index).copy(), menuSlot);
     }
  
     /** Ítem pegado al cursor (creativo), por encima de todo, igual que en el inventario vanilla. */
@@ -730,8 +831,9 @@ public class PokedexScreen extends Screen {
  
     /**
      * Reglas del inventario creativo vanilla sobre una casilla (huevo de aparición del mob):
-     *  - Cursor vacío: clic izq. = 1 huevo; Shift+clic izq. o rueda = stack completo.
-     *  - Mismo ítem en el cursor: clic izq. +1 (Shift o rueda = stack completo); clic der. -1.
+     *  - Cursor vacío: clic izq. = 1 huevo; rueda = stack completo al cursor.
+     *  - Shift+clic izq.: un stack completo directo al inventario del jugador (hotbar y luego filas, ver giveToInventory).
+     *  - Mismo ítem en el cursor: clic izq. +1; rueda = stack completo; clic der. -1.
      *  - Otro ítem en el cursor: clic izq. lo descarta; clic der. descarta 1 unidad.
      */
     private void handleCreativeClick(MobEntry entry, int button) {
@@ -756,16 +858,19 @@ public class PokedexScreen extends Screen {
  
         if (button != 0) return;
  
+        if (hasShiftDown()) { // Shift+clic: stack completo directo al inventario, sin tocar el cursor
+            if (hasEgg) giveToInventory(egg);
+            return;
+        }
+ 
         if (same) {
-            if (hasShiftDown()) {
-                carried.setCount(carried.getMaxStackSize());
-            } else if (carried.getCount() < carried.getMaxStackSize()) {
+            if (carried.getCount() < carried.getMaxStackSize()) {
                 carried.grow(1);
             }
         } else if (!carried.isEmpty()) {
             carried = ItemStack.EMPTY; // ítem distinto: se descarta el del cursor
         } else if (hasEgg) {
-            carried = egg.copyWithCount(hasShiftDown() ? egg.getMaxStackSize() : 1);
+            carried = egg.copyWithCount(1);
         }
     }
  

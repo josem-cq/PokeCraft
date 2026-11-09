@@ -1,5 +1,6 @@
 package com.jose.pokecraft.client.pokedex;
  
+import com.jose.pokecraft.pokedex.CaptureRules;
 import com.jose.pokecraft.pokedex.MobKind;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Holder;
@@ -86,7 +87,8 @@ public final class MobCatalog {
     @Nullable
     private static MobEntry describe(EntityType<?> type, ResourceLocation id, @Nullable Level level) {
         // Todos los tipos "vivos" (con atributos) tienen un AttributeSupplier registrado.
-        if (type == EntityType.PLAYER || !DefaultAttributes.hasSupplier(type)) return null;
+        // Solo lo capturable: tipos con huevo de aparición (más Ender Dragon y Wither). Ver CaptureRules.
+        if (!CaptureRules.isCapturable(type) || !DefaultAttributes.hasSupplier(type)) return null;
  
         // Se instancia (sin añadirla al mundo) solo para saber de qué clase es: Mob, NeutralMob, Enemy...
         Entity instance = null;

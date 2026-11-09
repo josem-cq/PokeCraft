@@ -35,7 +35,7 @@ public final class PokedexManager {
      * @return true si fue un desbloqueo nuevo.
      */
     public static boolean unlock(ServerPlayer player, EntityType<?> type, Level level, BlockPos pos) {
-        if (type == EntityType.PLAYER || type == EntityType.ARMOR_STAND) return false;
+        if (!CaptureRules.isCapturable(type)) return false; // mismo criterio que el catálogo y la captura
  
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
         PokedexData data = get(player);

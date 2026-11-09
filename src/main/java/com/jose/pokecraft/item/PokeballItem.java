@@ -1,6 +1,7 @@
 package com.jose.pokecraft.item;
  
 import com.jose.pokecraft.entity.PokeballProjectileEntity;
+import com.jose.pokecraft.pokedex.CaptureRules;
 import com.jose.pokecraft.pokedex.PokedexManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -118,6 +119,12 @@ public class PokeballItem extends Item {
         if (target.level().isClientSide()) return false;
  
         if (target instanceof Player || target instanceof net.minecraft.world.entity.decoration.ArmorStand) {
+            return false;
+        }
+ 
+        // Solo se capturan tipos con huevo de aparición (más Ender Dragon y Wither).
+        if (!CaptureRules.isCapturable(target.getType())) {
+            player.displayClientMessage(Component.translatable("message.pokecraft.not_capturable", target.getType().getDescription()), true);
             return false;
         }
  
