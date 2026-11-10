@@ -136,6 +136,15 @@ public class PokedexScreen extends Screen {
     /** Hay cambios hechos en esta sesión que aún no se han escrito al archivo. */
     private boolean unsaved = false;
  
+    // Arrastre sobre el inventario del jugador (creativo)
+    private enum DragMode { NONE, SPLIT, ONE, FILL, DELETE }
+ 
+    private DragMode dragMode = DragMode.NONE;
+    private int dragButton = -1;
+    private int dragStartSlot = -1;
+    /** Casillas recorridas durante el arrastre (sin repetir, en orden de paso). */
+    private final java.util.Set<Integer> dragSlots = new java.util.LinkedHashSet<>();
+ 
     /** Lista filtrada y ordenada de la pestaña actual (caché). */
     private List<MobEntry> filtered = List.of();
     private int tabTotal = 0;
@@ -608,11 +617,19 @@ public class PokedexScreen extends Screen {
         if (minecraft == null || minecraft.player == null) return;
         Inventory inventory = minecraft.player.getInventory();
         PokedexUi.raised(g, invX, invY, INV_W, INV_H, PokedexUi.PANEL_FILL);
+        // Reparto en curso: se previsualiza cuánto recibirá cada casilla antes de soltar.
+        DragResult preview = (dragMode == DragMode.SPLIT || dragMode == DragMode.ONE) && dragSlots.size() > 1
+                ? computeDrag(dragMode) : null;
         for (int index = 0; index < 36; index++) {
             int x = invSlotX(index);
             int y = invSlotY(index);
             PokedexUi.inset(g, x, y, 18, 18, PokedexUi.BUTTON_FILL);
             ItemStack stack = inventory.getItem(index);
+            Integer previewAdd = preview != null ? preview.adds().get(index) : null;
+            if (previewAdd != null) {
+                stack = stack.isEmpty() ? carried.copyWithCount(previewAdd) : stack.copyWithCount(stack.getCount() + previewAdd);
+                g.fill(x + 1, y + 1, x + 17, y + 17, 0x6080FF80);
+            }
             if (!stack.isEmpty()) {
                 g.renderItem(stack, x + 1, y + 1);
                 g.renderItemDecorations(font, stack, x + 1, y + 1);
@@ -641,17 +658,16 @@ public class PokedexScreen extends Screen {
  
     /**
      * Clic en una casilla del inventario con las reglas del inventario creativo (cursor local, cada cambio se
-     * envía al servidor): izq. = recoger/colocar/apilar/intercambiar todo; der. = recoger la mitad / colocar 1;
-     * Shift+clic = descartar el contenido de la casilla.
+     * envía al servidor): izq. = recoger/colocar/apilar/intercambiar todo; der. = recoger la mitad / colocar 1.
      */
-    private void clickInventorySlot(int index, int button) {
+    private void clickInventorySlot(int index, int button, boolean allowDelete) {
         if (minecraft == null || minecraft.player == null || minecraft.gameMode == null) return;
         if (!minecraft.gameMode.hasInfiniteItems() || (button != 0 && button != 1)) return;
         Inventory inventory = minecraft.player.getInventory();
         ItemStack slot = inventory.getItem(index);
  
         // Shift+clic: descarta (elimina) el contenido de la casilla, sin tocar el cursor.
-        if (hasShiftDown()) {
+        if (allowDelete && hasShiftDown()) {
             if (slot.isEmpty()) return;
             inventory.setItem(index, ItemStack.EMPTY);
             syncInventorySlot(inventory, index);
@@ -699,6 +715,124 @@ public class PokedexScreen extends Screen {
             }
         }
         syncInventorySlot(inventory, index);
+    }
+ 
+    // ---------------------------------------------------------------------------------------------
+    // Arrastre sobre el inventario (reglas del inventario creativo vanilla)
+    // ---------------------------------------------------------------------------------------------
+ 
+    private record DragResult(java.util.Map<Integer, Integer> adds, int remainder) {}
+ 
+    /**
+     * Pulsación sobre una casilla del inventario:
+     *  - Shift + clic izq./der.: elimina la casilla y sigue eliminando las que atraviese el arrastre.
+     *  - Rueda con el cursor vacío: coge un stack completo de lo que hay en la casilla (sin quitarlo).
+     *  - Rueda con ítems en el cursor: pone un stack completo en la casilla y en cada una que atraviese el arrastre.
+     *  - Clic izq. con ítems en el cursor: empieza un reparto en partes iguales (se aplica al soltar).
+     *  - Clic der. con ítems en el cursor: empieza un reparto de uno en uno (se aplica al soltar).
+     *  - Si no, un clic normal (recoger, colocar, intercambiar...).
+     */
+    private void startInventoryInteraction(int index, int button) {
+        if (minecraft == null || minecraft.player == null || minecraft.gameMode == null) return;
+        if (!minecraft.gameMode.hasInfiniteItems()) return;
+        Inventory inventory = minecraft.player.getInventory();
+        ItemStack slot = inventory.getItem(index);
+ 
+        dragSlots.clear();
+        dragStartSlot = index;
+        dragButton = button;
+        dragMode = DragMode.NONE;
+ 
+        if (hasShiftDown() && (button == 0 || button == 1)) {
+            dragMode = DragMode.DELETE;
+            dragSlots.add(index);
+            deleteSlot(inventory, index);
+            return;
+        }
+        if (button == 2) {
+            if (carried.isEmpty()) {
+                if (!slot.isEmpty()) carried = slot.copyWithCount(slot.getMaxStackSize());
+                return;
+            }
+            dragMode = DragMode.FILL;
+            dragSlots.add(index);
+            fillSlot(inventory, index);
+            return;
+        }
+        if ((button == 0 || button == 1) && !carried.isEmpty()) {
+            dragMode = button == 0 ? DragMode.SPLIT : DragMode.ONE;
+            dragSlots.add(index);
+            return;
+        }
+        clickInventorySlot(index, button, false);
+    }
+ 
+    private void deleteSlot(Inventory inventory, int index) {
+        if (inventory.getItem(index).isEmpty()) return;
+        inventory.setItem(index, ItemStack.EMPTY);
+        syncInventorySlot(inventory, index);
+    }
+ 
+    /** Rueda: deja la casilla con un stack completo del ítem del cursor (si estaba vacía o ya tenía ese ítem). */
+    private void fillSlot(Inventory inventory, int index) {
+        ItemStack slot = inventory.getItem(index);
+        if (!slot.isEmpty() && !ItemStack.isSameItemSameComponents(slot, carried)) return;
+        if (!slot.isEmpty() && slot.getCount() >= slot.getMaxStackSize()) return;
+        inventory.setItem(index, carried.copyWithCount(carried.getMaxStackSize()));
+        syncInventorySlot(inventory, index);
+    }
+ 
+    /**
+     * Reparte el cursor entre las casillas recorridas (solo las vacías o con el mismo ítem):
+     * SPLIT = partes iguales (lo que sobra se queda en el cursor); ONE = una unidad por casilla.
+     */
+    private DragResult computeDrag(DragMode mode) {
+        java.util.Map<Integer, Integer> adds = new java.util.LinkedHashMap<>();
+        if (minecraft == null || minecraft.player == null || carried.isEmpty()) return new DragResult(adds, carried.getCount());
+        Inventory inventory = minecraft.player.getInventory();
+ 
+        java.util.List<Integer> eligible = new ArrayList<>();
+        for (int index : dragSlots) {
+            ItemStack slot = inventory.getItem(index);
+            if (slot.isEmpty() || ItemStack.isSameItemSameComponents(slot, carried)) eligible.add(index);
+        }
+ 
+        int total = carried.getCount();
+        int max = carried.getMaxStackSize();
+        int remaining = total;
+        int share = eligible.isEmpty() ? 0 : total / eligible.size();
+        for (int index : eligible) {
+            int room = max - inventory.getItem(index).getCount();
+            int add = mode == DragMode.SPLIT ? Math.min(share, room) : Math.min(1, room);
+            if (add <= 0 || add > remaining) continue;
+            adds.put(index, add);
+            remaining -= add;
+        }
+        return new DragResult(adds, remaining);
+    }
+ 
+    private void finishDrag() {
+        DragMode mode = dragMode;
+        dragMode = DragMode.NONE;
+        if (mode == DragMode.SPLIT || mode == DragMode.ONE) {
+            if (dragSlots.size() <= 1) {
+                // Sin arrastre real: es un clic normal sobre la casilla.
+                clickInventorySlot(dragStartSlot, dragButton, false);
+            } else if (minecraft != null && minecraft.player != null) {
+                DragResult result = computeDrag(mode);
+                Inventory inventory = minecraft.player.getInventory();
+                result.adds().forEach((index, add) -> {
+                    ItemStack slot = inventory.getItem(index);
+                    if (slot.isEmpty()) inventory.setItem(index, carried.copyWithCount(add));
+                    else slot.grow(add);
+                    syncInventorySlot(inventory, index);
+                });
+                carried = result.remainder() > 0 ? carried.copyWithCount(result.remainder()) : ItemStack.EMPTY;
+            }
+        }
+        dragSlots.clear();
+        dragStartSlot = -1;
+        dragButton = -1;
     }
  
     /** ¿El punto está dentro de la interfaz (panel, pestañas o bloque de inventario)? Fuera = soltar el ítem al mundo. */
@@ -765,7 +899,13 @@ public class PokedexScreen extends Screen {
     /** Ítem pegado al cursor (creativo), por encima de todo, igual que en el inventario vanilla. */
     /** Ítem en el cursor: el local en creativo; en supervivencia el del menú del inventario del jugador. */
     private ItemStack cursorStack() {
-        if (creative) return carried;
+        if (creative) {
+            if ((dragMode == DragMode.SPLIT || dragMode == DragMode.ONE) && dragSlots.size() > 1) {
+                int remainder = computeDrag(dragMode).remainder(); // lo que sobra del reparto sigue en el cursor
+                return remainder > 0 ? carried.copyWithCount(remainder) : ItemStack.EMPTY;
+            }
+            return carried;
+        }
         return minecraft != null && minecraft.player != null ? minecraft.player.containerMenu.getCarried() : ItemStack.EMPTY;
     }
  
@@ -1059,7 +1199,7 @@ public class PokedexScreen extends Screen {
             }
             int slotIndex = inventorySlotAt(mouseX, mouseY);
             if (slotIndex >= 0) {
-                clickInventorySlot(slotIndex, button);
+                startInventoryInteraction(slotIndex, button);
                 return true;
             }
         }
@@ -1155,6 +1295,15 @@ public class PokedexScreen extends Screen {
  
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (dragMode != DragMode.NONE && minecraft != null && minecraft.player != null) {
+            int index = inventorySlotAt(mouseX, mouseY);
+            if (index >= 0 && dragSlots.add(index)) {
+                Inventory inventory = minecraft.player.getInventory();
+                if (dragMode == DragMode.DELETE) deleteSlot(inventory, index);
+                else if (dragMode == DragMode.FILL) fillSlot(inventory, index);
+            }
+            return true;
+        }
         if (draggingScrollbar) {
             scrollToMouse(mouseY);
             return true;
@@ -1164,6 +1313,10 @@ public class PokedexScreen extends Screen {
  
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (dragMode != DragMode.NONE && button == dragButton) {
+            finishDrag();
+            return true;
+        }
         draggingScrollbar = false;
         return super.mouseReleased(mouseX, mouseY, button);
     }
