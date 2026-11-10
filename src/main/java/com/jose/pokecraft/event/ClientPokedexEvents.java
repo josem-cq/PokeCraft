@@ -4,6 +4,7 @@ import com.jose.pokecraft.PokeCraftMod;
 import com.jose.pokecraft.client.pokedex.ClientPokedexData;
 import com.jose.pokecraft.client.pokedex.MobCatalog;
 import com.jose.pokecraft.client.pokedex.PokedexButton;
+import com.jose.pokecraft.pokedex.EntityConfig;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -44,6 +45,7 @@ public class ClientPokedexEvents {
     @SubscribeEvent
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientPokedexData.clear();
+        EntityConfig.clear();
         MobCatalog.invalidate();
     }
 }

@@ -2,7 +2,9 @@ package com.jose.pokecraft.block;
  
 import com.jose.pokecraft.item.CapturedMobStats;
 import com.jose.pokecraft.item.PokeballItem;
+import com.jose.pokecraft.pokedex.CaptureRules;
 import com.jose.pokecraft.pokedex.PokedexManager;
+import net.minecraft.network.chat.Component;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -100,6 +102,14 @@ public class MobJarBlock extends BaseEntityBlock {
                 CustomData customData = heldItem.get(DataComponents.CUSTOM_DATA);
                 if (customData != null && customData.copyTag().contains("CapturedEntity")) {
                     CompoundTag entityTag = customData.copyTag().getCompound("CapturedEntity");
+ 
+                    // Solo entidades activas en la configuración (ver EntityConfig).
+                    EntityType<?> insertType = CapturedMobStats.getEntityType(entityTag);
+                    if (insertType != null && !CaptureRules.isCapturable(insertType)) {
+                        player.displayClientMessage(Component.translatable("message.pokecraft.not_capturable", insertType.getDescription()), true);
+                        return InteractionResult.FAIL;
+                    }
+ 
                     jarBE.setStoredEntityTag(entityTag);
  
                     // PokéDex: guardar un mob en el frasco lo desbloquea (aunque la bola viniera de otra fuente).

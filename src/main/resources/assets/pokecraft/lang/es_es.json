@@ -63,5 +63,16 @@
   "pokecraft.pokedex.tooltip.date": "Fecha: día %1$d, %2$s",
   "pokecraft.pokedex.dim.overworld": "Overworld",
   "pokecraft.pokedex.dim.the_nether": "Nether",
-  "pokecraft.pokedex.dim.the_end": "End"
+  "pokecraft.pokedex.dim.the_end": "End",
+  "pokecraft.pokedex.tab.others": "Otros",
+  "pokecraft.pokedex.tab.others_hint": "Entidades sin huevo de aparición",
+  "pokecraft.pokedex.filter.enabled": "Activo",
+  "pokecraft.pokedex.enabled.true": "true",
+  "pokecraft.pokedex.enabled.false": "false",
+  "pokecraft.pokedex.save": "Guardar",
+  "pokecraft.pokedex.toggle.title": "Entidad activa (true/false)",
+  "pokecraft.pokedex.toggle.hint": "Activa: se puede capturar, meter en frascos y aparece en la PokéDex",
+  "pokecraft.debug.spawn": "Generar %1$s",
+  "message.pokecraft.config_saved": "Configuración de entidades guardada",
+  "message.pokecraft.config_save_failed": "No se pudo guardar la configuración de entidades"
 }

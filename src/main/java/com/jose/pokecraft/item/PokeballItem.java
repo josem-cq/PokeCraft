@@ -118,7 +118,7 @@ public class PokeballItem extends Item {
     public static boolean attemptCatch(LivingEntity target, Player player, Tier tier, ItemStack thrownStack) {
         if (target.level().isClientSide()) return false;
  
-        if (target instanceof Player || target instanceof net.minecraft.world.entity.decoration.ArmorStand) {
+        if (target instanceof Player) {
             return false;
         }
  

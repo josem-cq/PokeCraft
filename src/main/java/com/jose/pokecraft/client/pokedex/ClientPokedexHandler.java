@@ -1,6 +1,8 @@
 package com.jose.pokecraft.client.pokedex;
  
+import com.jose.pokecraft.network.EntityConfigSyncPayload;
 import com.jose.pokecraft.network.PokedexSyncPayload;
+import com.jose.pokecraft.pokedex.EntityConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
  
@@ -20,6 +22,18 @@ public final class ClientPokedexHandler {
         } else if (minecraft.screen instanceof InventoryScreen inventory) {
             // El botón del inventario pidió los datos: al llegar, se abre la PokéDex con ellos ya cargados.
             minecraft.setScreen(new PokedexScreen(inventory));
+        }
+    }
+ 
+    /** Copia de la configuración de entidades activas enviada por el servidor (completa al entrar, o un cambio en vivo). */
+    public static void handleConfigSync(EntityConfigSyncPayload payload) {
+        if (payload.replace()) {
+            EntityConfig.replaceAll(payload.values());
+        } else {
+            payload.values().forEach(EntityConfig::set);
+        }
+        if (Minecraft.getInstance().screen instanceof PokedexScreen screen) {
+            screen.onDataUpdated();
         }
     }
 }
