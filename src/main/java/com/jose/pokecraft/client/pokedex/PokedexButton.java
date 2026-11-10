@@ -1,5 +1,6 @@
 package com.jose.pokecraft.client.pokedex;
  
+import com.jose.pokecraft.PokeCraftMod;
 import com.jose.pokecraft.network.PokedexRequestPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -8,9 +9,8 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.network.PacketDistributor;
  
 import java.lang.reflect.Method;
@@ -24,8 +24,14 @@ import java.lang.reflect.Method;
  *    no necesita datos del servidor).
  */
 public class PokedexButton extends Button {
-    /** Icono provisional: la perla de ender (minecraft:item/ender_pearl). Cámbialo aquí por tu propia textura. */
-    private final ItemStack icon = new ItemStack(Items.ENDER_PEARL);
+    /**
+     * Icono del botón: PNG propio de 16x16 en src/main/resources/assets/pokecraft/textures/gui/pokedex_button.png
+     * (ruta en el juego: pokecraft:textures/gui/pokedex_button.png). Si usas otro tamaño, cambia TEXTURE_SIZE.
+     */
+    private static final ResourceLocation ICON_TEXTURE =
+            ResourceLocation.fromNamespaceAndPath(PokeCraftMod.MOD_ID, "textures/gui/pokedex_button.png");
+    private static final int ICON_SIZE = 16;
+    private static final int TEXTURE_SIZE = 16;
  
     private final AbstractContainerScreen<?> screen;
     private final boolean creative;
@@ -71,7 +77,7 @@ public class PokedexButton extends Button {
         // El libro de recetas desplaza la pantalla al abrirse sin reinicializarla: se recoloca cada frame.
         reposition();
         super.renderWidget(graphics, mouseX, mouseY, partialTick);
-        graphics.renderItem(icon, getX() + 2, getY() + 1);
+        graphics.blit(ICON_TEXTURE, getX() + 2, getY() + 1, 0.0F, 0.0F, ICON_SIZE, ICON_SIZE, TEXTURE_SIZE, TEXTURE_SIZE);
     }
  
     private static Method inventoryTabMethod;

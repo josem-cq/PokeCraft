@@ -641,13 +641,23 @@ public class PokedexScreen extends Screen {
  
     /**
      * Clic en una casilla del inventario con las reglas del inventario creativo (cursor local, cada cambio se
-     * envía al servidor): izq. = recoger/colocar/apilar/intercambiar todo; der. = recoger la mitad / colocar 1.
+     * envía al servidor): izq. = recoger/colocar/apilar/intercambiar todo; der. = recoger la mitad / colocar 1;
+     * Shift+clic = descartar el contenido de la casilla.
      */
     private void clickInventorySlot(int index, int button) {
         if (minecraft == null || minecraft.player == null || minecraft.gameMode == null) return;
         if (!minecraft.gameMode.hasInfiniteItems() || (button != 0 && button != 1)) return;
         Inventory inventory = minecraft.player.getInventory();
         ItemStack slot = inventory.getItem(index);
+ 
+        // Shift+clic: descarta (elimina) el contenido de la casilla, sin tocar el cursor.
+        if (hasShiftDown()) {
+            if (slot.isEmpty()) return;
+            inventory.setItem(index, ItemStack.EMPTY);
+            syncInventorySlot(inventory, index);
+            return;
+        }
+ 
         boolean same = !slot.isEmpty() && !carried.isEmpty() && ItemStack.isSameItemSameComponents(slot, carried);
  
         if (button == 0) {
