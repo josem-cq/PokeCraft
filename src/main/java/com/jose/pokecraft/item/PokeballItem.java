@@ -1,5 +1,6 @@
 package com.jose.pokecraft.item;
  
+import com.jose.pokecraft.ai.MobOrderManager;
 import com.jose.pokecraft.entity.PokeballProjectileEntity;
 import com.jose.pokecraft.pokedex.CaptureRules;
 import com.jose.pokecraft.pokedex.PokedexManager;
@@ -121,7 +122,13 @@ public class PokeballItem extends Item {
         if (target instanceof Player) {
             return false;
         }
- 
+
+        // Modo Venganza: inmune a la captura con cualquier bola (incluida la Master Ball).
+        if (MobOrderManager.isVengeance(target)) {
+            player.displayClientMessage(Component.translatable("message.pokecraft.vengeance.no_capture", target.getDisplayName()), true);
+            return false;
+        }
+
         // Solo se capturan tipos con huevo de aparición (más Ender Dragon y Wither).
         if (!CaptureRules.isCapturable(target.getType())) {
             player.displayClientMessage(Component.translatable("message.pokecraft.not_capturable", target.getType().getDescription()), true);
@@ -218,7 +225,11 @@ public class PokeballItem extends Item {
             CompoundTag persistent = living.getPersistentData();
             persistent.putBoolean("PokeCraftFriendly", true);
             persistent.putUUID("OwnerUUID", player.getUUID());
-            persistent.putInt("MobOrderState", 0);
+            // El modo (seguir / quieto / proteger...) viaja dentro del NBT guardado ("NeoForgeData") a través de
+            // bolas, tarros, inventarios y reinicios: se conserva tal cual. Solo un mob sin modo guardado (salvaje
+            // recién capturado) sale con el de por defecto, "siguiendo". Se reescribe normalizado por si el valor
+            // guardado no fuese válido.
+            persistent.putInt(MobOrderManager.KEY_ORDER, MobOrderManager.getOrder(living).ordinal());
             if (entityTag.contains("PokeballRegistryName")) {
                 persistent.putString("PokeballRegistryName", entityTag.getString("PokeballRegistryName"));
             }

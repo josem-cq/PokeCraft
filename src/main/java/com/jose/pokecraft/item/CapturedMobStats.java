@@ -1,5 +1,7 @@
 package com.jose.pokecraft.item;
  
+import com.jose.pokecraft.ai.MobOrderManager;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
@@ -282,7 +284,12 @@ public final class CapturedMobStats {
         if (includeBall) {
             tooltip.add(Component.literal("§7Bola: §f").append(getBallName(entityTag)));
         }
- 
+
+        // Modo con el que saldrá el mob al liberarse (siguiendo / quieto / protegiendo...), leído del propio NBT.
+        tooltip.add(Component.translatable("tooltip.pokecraft.mode",
+                        MobOrderManager.getOrderFromSavedEntity(entityTag).displayName().copy().withStyle(ChatFormatting.WHITE))
+                .withStyle(ChatFormatting.GRAY));
+
         appendStatLines(tooltip, compute(entityTag, registries));
         appendActiveEffects(tooltip, entityTag);
  

@@ -184,7 +184,9 @@ public final class DirectAttackManager {
     /** Aliados capturados del jugador que están cargados en ese nivel. */
     private static List<Mob> findAllies(ServerLevel level, UUID ownerId) {
         return new ArrayList<>(level.getEntities(EntityTypeTest.forClass(Mob.class),
-                mob -> mob.isAlive() && MobOrderManager.isFriendly(mob) && ownerId.equals(MobOrderManager.getOwnerId(mob))));
+                // Un mob en Modo Venganza ignora las órdenes globales (todos quietos, ataque directo y su cancelación).
+                mob -> mob.isAlive() && MobOrderManager.isFriendly(mob) && !MobOrderManager.isVengeance(mob)
+                        && ownerId.equals(MobOrderManager.getOwnerId(mob))));
     }
  
     /** "A", "A y B", "A, B y C" (el "y" sale del idioma del jugador). */
