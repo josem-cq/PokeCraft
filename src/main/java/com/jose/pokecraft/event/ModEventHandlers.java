@@ -3,7 +3,9 @@ package com.jose.pokecraft.event;
 import com.jose.pokecraft.PokeCraftMod;
 import com.jose.pokecraft.ai.DirectAttackManager;
 import com.jose.pokecraft.ai.MobOrder;
+import com.jose.pokecraft.ai.LookIndicatorManager;
 import com.jose.pokecraft.ai.MobOrderManager;
+import com.jose.pokecraft.ai.VengeanceManager;
 import com.jose.pokecraft.item.PokeballItem;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
@@ -14,6 +16,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
@@ -22,11 +25,15 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
@@ -230,17 +237,104 @@ public class ModEventHandlers {
     // Prevenir que los mobs aliados ataquen a su dueño y limpiar su objetivo hostil
     @SubscribeEvent
     public static void onLivingIncomingDamage(LivingIncomingDamageEvent event) {
-        if (event.getSource().getEntity() instanceof LivingEntity attacker && event.getEntity() instanceof Player player) {
-            if (attacker.getPersistentData().contains("PokeCraftFriendly")) {
-                UUID ownerUUID = attacker.getPersistentData().getUUID("OwnerUUID");
-                if (player.getUUID().equals(ownerUUID)) {
-                    event.setCanceled(true);
-                    if (attacker instanceof Mob mob) {
-                        mob.setTarget(null);
-                    }
+        LivingEntity victim = event.getEntity();
+        Entity attacker = event.getSource().getEntity();
+        if (attacker == null || attacker == victim) return;
+
+        // 1. Aliado -> su dueño: sin daño. Excepción: un mob en Modo Venganza SÍ puede dañar a su dueño.
+        if (victim instanceof Player player) {
+            if (attacker instanceof LivingEntity livingAttacker
+                    && MobOrderManager.isFriendly(livingAttacker)
+                    && !MobOrderManager.isVengeance(livingAttacker)
+                    && player.getUUID().equals(MobOrderManager.getOwnerId(livingAttacker))) {
+                event.setCanceled(true);
+                if (livingAttacker instanceof Mob mob) {
+                    mob.setTarget(null);
                 }
             }
+            return;
         }
+
+        // 2. Daño recibido por un aliado capturado. En Venganza el mob recibe daño normal de todos (dueño y resto).
+        if (!MobOrderManager.isFriendly(victim) || MobOrderManager.isVengeance(victim)) return;
+        UUID ownerId = MobOrderManager.getOwnerId(victim);
+        if (ownerId == null) return;
+
+        boolean block;
+        if (ownerId.equals(attacker.getUUID())) {
+            // El dueño solo puede dañar a su aliado si está estrictamente en modo "quieto".
+            block = MobOrderManager.getOrder(victim) != MobOrder.STAY;
+        } else {
+            // Aliados del MISMO dueño no se dañan entre sí. Con dueños distintos el combate es normal.
+            block = MobOrderManager.isFriendly(attacker)
+                    && !MobOrderManager.isVengeance(attacker)
+                    && ownerId.equals(MobOrderManager.getOwnerId(attacker));
+        }
+
+        if (block) {
+            event.setCanceled(true);
+            if (attacker instanceof Mob attackerMob) {
+                attackerMob.setTarget(null);
+            }
+        }
+    }
+
+    /**
+     * Cuenta los golpes que el dueño asesta a su aliado en modo "quieto" y evalúa el Modo Venganza. Se hace DESPUÉS
+     * del daño (Post) para contar solo golpes reales (no los absorbidos por los ticks de invulnerabilidad) y para
+     * que la curación completa de la activación no se vea pisada por el propio golpe.
+     */
+    @SubscribeEvent
+    public static void onLivingDamagePost(LivingDamageEvent.Post event) {
+        if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) return;
+        if (event.getNewDamage() <= 0.0F) return;
+        if (!(event.getSource().getEntity() instanceof ServerPlayer player)) return;
+        if (!MobOrderManager.isFriendly(mob) || !player.getUUID().equals(MobOrderManager.getOwnerId(mob))) return;
+        VengeanceManager.recordOwnerHit(mob, player);
+    }
+
+    /**
+     * Un mob en Modo Venganza no se puede guardar ni recibir órdenes: bloquea la recogida (Shift + clic derecho), el
+     * cambio de modo con el palo y el almacenamiento vanilla (cubo de agua en peces/ajolotes/renacuajos, correa).
+     * Prioridad alta y cancelando el evento, así el manejador normal de abajo ni siquiera se ejecuta.
+     * Shift + palo (orden global "Todos quietos") no se bloquea: ese mob simplemente la ignora.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onVengeanceInteract(PlayerInteractEvent.EntityInteract event) {
+        if (!(event.getTarget() instanceof Mob mob) || !MobOrderManager.isVengeance(mob)) return;
+        Player player = event.getEntity();
+        boolean isOwner = player.getUUID().equals(MobOrderManager.getOwnerId(mob));
+        boolean holdsStick = player.getMainHandItem().is(Items.STICK) || player.getOffhandItem().is(Items.STICK);
+
+        // Almacenamiento vanilla: peces, ajolotes y renacuajos se recogen con un cubo de agua.
+        boolean storage = event.getItemStack().is(Items.WATER_BUCKET);
+        boolean leash = event.getItemStack().is(Items.LEAD);
+        boolean ownerPickup = isOwner && player.isShiftKeyDown() && !player.getMainHandItem().is(Items.STICK);
+        boolean ownerOrder = isOwner && !player.isShiftKeyDown() && holdsStick;
+        if (!(storage || leash || ownerPickup || ownerOrder)) return;
+
+        if (!event.getLevel().isClientSide() && isOwner && event.getHand() == InteractionHand.MAIN_HAND) {
+            player.displayClientMessage(
+                    Component.translatable("message.pokecraft.vengeance.untouchable", mob.getDisplayName()), true);
+        }
+        event.setCancellationResult(InteractionResult.FAIL);
+        event.setCanceled(true);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Indicador de modo al apuntar con el palo
+    // ---------------------------------------------------------------------------------------------
+
+    @SubscribeEvent
+    public static void onPlayerTick(PlayerTickEvent.Post event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            LookIndicatorManager.tick(player);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        LookIndicatorManager.forget(event.getEntity().getUUID());
     }
  
     // Sincronización de nombre en Yunque

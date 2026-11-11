@@ -10,6 +10,7 @@ import com.jose.pokecraft.ai.goal.ProtectTargetGoal;
 import com.jose.pokecraft.ai.goal.StayPutGoal;
 import com.jose.pokecraft.ai.goal.TargetGuardGoal;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -47,6 +48,10 @@ public final class MobOrderManager {
     /** UUID de la entidad marcada con el palo (ataque directo activo) y su nombre para los mensajes. */
     public static final String KEY_DIRECT_TARGET = "PokeCraftDirectTarget";
     public static final String KEY_DIRECT_NAME = "PokeCraftDirectName";
+    /** Modo Venganza activo (ver {@link VengeanceManager}). Es una bandera aparte, NO un valor de {@link MobOrder}. */
+    public static final String KEY_VENGEANCE = "PokeCraftVengeance";
+    /** Clave con la que NeoForge guarda {@link Entity#getPersistentData()} dentro del NBT de una entidad guardada. */
+    public static final String ENTITY_PERSISTENT_TAG = "NeoForgeData";
  
     /** Distancias de seguimiento (bloques). */
     private static final float FOLLOW_START = 6.0F;
@@ -72,6 +77,11 @@ public final class MobOrderManager {
     public static boolean isFriendly(Entity entity) {
         return entity.getPersistentData().getBoolean(KEY_FRIENDLY);
     }
+
+    /** ¿Está el mob en Modo Venganza? (hostil hacia su dueño, inmune a captura, órdenes y recogida). */
+    public static boolean isVengeance(Entity entity) {
+        return entity.getPersistentData().getBoolean(KEY_VENGEANCE);
+    }
  
     @Nullable
     public static UUID getOwnerId(Entity entity) {
@@ -89,11 +99,23 @@ public final class MobOrderManager {
     public static MobOrder getOrder(Entity entity) {
         return MobOrder.byId(entity.getPersistentData().getInt(KEY_ORDER));
     }
+
+    /**
+     * Modo guardado dentro del NBT de una entidad capturada (Poké Ball / Mob Jar). Los datos persistentes viajan en
+     * "NeoForgeData", así que el modo sobrevive a capturas, tarros, inventarios y reinicios. Si la entidad no tiene
+     * modo (mob salvaje recién capturado) se devuelve el de por defecto, que es con el que saldrá al liberarse.
+     */
+    public static MobOrder getOrderFromSavedEntity(CompoundTag entityTag) {
+        if (!entityTag.contains(ENTITY_PERSISTENT_TAG, Tag.TAG_COMPOUND)) return MobOrder.FOLLOW;
+        return MobOrder.byId(entityTag.getCompound(ENTITY_PERSISTENT_TAG).getInt(KEY_ORDER));
+    }
  
     /**
      * Guarda el modo y lo aplica de inmediato. Cambiar el modo a mano termina cualquier ataque directo en curso.
      */
     public static void setOrder(Mob mob, MobOrder order) {
+        // Venganza: ignora cualquier orden (individual o global).
+        if (isVengeance(mob)) return;
         clearDirectTarget(mob);
         mob.getPersistentData().putInt(KEY_ORDER, order.ordinal());
         apply(mob, order);
@@ -101,6 +123,7 @@ public final class MobOrderManager {
  
     /** Pasa al siguiente modo del ciclo, lo aplica y lo devuelve. */
     public static MobOrder cycleOrder(Mob mob) {
+        if (isVengeance(mob)) return getOrder(mob);
         MobOrder next = getOrder(mob).next();
         setOrder(mob, next);
         return next;
@@ -122,6 +145,7 @@ public final class MobOrderManager {
  
     /** Marca a la víctima y reinstala la IA del mob con la superposición de ataque directo. */
     public static void setDirectTarget(Mob mob, LivingEntity victim) {
+        if (isVengeance(mob)) return; // su único objetivo es el dueño
         CompoundTag data = mob.getPersistentData();
         data.putUUID(KEY_DIRECT_TARGET, victim.getUUID());
         data.putString(KEY_DIRECT_NAME, victim.getName().getString());
@@ -203,7 +227,8 @@ public final class MobOrderManager {
         if (ownerId == null) return false;
         if (ownerId.equals(entity.getUUID())) return true;
         if (entity instanceof OwnableEntity ownable && ownerId.equals(ownable.getOwnerUUID())) return true;
-        return isFriendly(entity) && ownerId.equals(getOwnerId(entity));
+        // Un mob en Venganza se rebeló contra su dueño: deja de ser aliado (puede ser objetivo y recibir daño).
+        return isFriendly(entity) && !isVengeance(entity) && ownerId.equals(getOwnerId(entity));
     }
  
     public static boolean isAllowedTarget(Mob mob, LivingEntity target) {
@@ -212,6 +237,10 @@ public final class MobOrderManager {
     }
  
     public static boolean isTargetAllowed(Mob mob, LivingEntity target, MobOrder order) {
+        // Venganza: el dueño es el ÚNICO objetivo válido, sea cual sea el modo guardado.
+        if (isVengeance(mob)) {
+            return target.getUUID().equals(getOwnerId(mob));
+        }
         // La víctima marcada con el palo siempre es válida, sea cual sea el modo (excepto Quieto, que ignora la orden).
         UUID direct = getDirectTargetId(mob);
         if (direct != null && direct.equals(target.getUUID())) {
@@ -255,6 +284,16 @@ public final class MobOrderManager {
         // 4. Instalar las metas.
         mob.goalSelector.addGoal(0, new TargetGuardGoal(mob, order));
  
+        // 4-venganza. Modo Venganza: sustituye a cualquier modo y al ataque directo. Reutiliza las MISMAS metas de
+        //     aproximación y de objetivo del ataque directo, pero con el dueño como único objetivo. Al no instalarse
+        //     FollowOwnerMobGoal no hay teletransporte: se avanza con la navegación normal hasta que la IA nativa
+        //     (melé / disparo) toma el control.
+        if (isVengeance(mob)) {
+            mob.goalSelector.addGoal(1, new DirectApproachGoal(mob, VengeanceManager::resolveTarget));
+            mob.targetSelector.addGoal(0, new DirectTargetGoal(mob, VengeanceManager::resolveTarget, null));
+            return;
+        }
+
         // 4a. Ataque directo activo (el modo Quieto lo ignora): máxima prioridad, sin metas del modo. Al no
         //     instalarse FollowOwnerMobGoal no hay teletransporte posible; se avanza con la navegación normal.
         if (order != MobOrder.STAY && getDirectTargetId(mob) != null) {

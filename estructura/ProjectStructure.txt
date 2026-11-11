@@ -1,4 +1,4 @@
-tree "D:\Archivos\Documentos\GitHub\PokeCraft" /F
+PS C:\Users\josem> tree "D:\Archivos\Documentos\GitHub\PokeCraft" /F
 Listado de rutas de carpetas para el volumen Disco Genérico
 El número de serie del volumen es 5246-36F4
 D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
@@ -52,22 +52,36 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │   │   configuration-cache.lock
 │   │   │   gc.properties
 │   │   │
+│   │   ├───0a2018e3-6ffd-457b-a4af-4abb000c0679
 │   │   ├───15c08852-084e-4b71-9fa2-63bc61684128
-│   │   ├───3d7039d5-49e0-4a69-a60f-6b54f6cc02f3
 │   │   ├───3dd8516c-c86c-4866-86cd-5ebb3415945e
+│   │   ├───4f9e67c2-86f2-496c-af06-a33268e2b6ef
 │   │   ├───517f8bea-d18e-4dcd-ba0e-2c80c902b7fd
+│   │   ├───529e43a4-ab31-4974-b451-2e995dbc804e
 │   │   ├───5q828ghtetg4ihp988dwwsqw3
 │   │   │       candidates.bin
 │   │   │
+│   │   ├───6f435245-a293-4b75-a4d7-c825b7a04474
 │   │   ├───73b24deb-2474-4889-a920-2fea1f4709c0
+│   │   ├───83f5bff2-db42-416c-a230-93658a49ac2a
 │   │   ├───947a4118-e166-40ae-9deb-d92d92c52ec8
 │   │   ├───9d4d5556-f0a9-40bc-87cf-bfe729b817de
-│   │   ├───a3125764-b419-475e-bd77-0e20cfda088c
+│   │   ├───a9135c7a-85fc-4d60-82f2-fdaf057532a8
+│   │   ├───a93aa304-d6f8-4996-b5e4-8976a7e480ce
+│   │   ├───b59510b9-0d6e-4d87-ac44-08bf6a52241a
+│   │   ├───b960b567-57c4-442a-82ce-ba232fad5c39
+│   │   ├───bb89445a-2169-437a-9342-0defbe1e4fd2
 │   │   ├───c080be4b-6e37-4912-8a01-07f6b813146b
 │   │   ├───c140a5ef-c3ab-40e9-b43c-77a4b860f19f
-│   │   ├───cde9250d-57f9-446a-a266-4ab002ea9654
+│   │   ├───cc04c033-48a0-47af-a1a4-e583bf848f94
 │   │   ├───ce5ff72c-2af1-4ded-a316-f9e31cc0aa29
 │   │   ├───d5c9b32d-d8c8-4b55-9a49-98f24338f60c
+│   │   ├───d7b51fbe-ef2b-43c5-be31-234775c0c4eb
+│   │   ├───e639102a-fad0-464c-b165-72221c806b39
+│   │   ├───e9654558-7898-4b67-bc38-5cafe4c6eaa8
+│   │   ├───ed6de994-0234-4149-a100-61892e731b0d
+│   │   ├───f825ce45-2645-4716-9426-20aa0be3c841
+│   │   ├───fbb2596a-c4b1-4631-99bc-7ebdc2c4adb1
 │   │   │       .globals.work.bin
 │   │   │       .strings.work.bin
 │   │   │       build.work.bin
@@ -78,8 +92,6 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │   │       work.bin
 │   │   │       _.work.bin
 │   │   │
-│   │   ├───f1b75334-0e21-4a8e-8964-7db326628cc4
-│   │   ├───f825ce45-2645-4716-9426-20aa0be3c841
 │   │   └───ff69a308-6c5c-401c-9dc6-ccd88821424a
 │   └───vcs-1
 │           gc.properties
@@ -99,11 +111,47 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │                   └───pokecraft
 │   │                       │   PokeCraftMod.class
 │   │                       │
+│   │                       ├───ai
+│   │                       │   │   DirectAttackManager.class
+│   │                       │   │   MobOrder.class
+│   │                       │   │   MobOrderManager$1.class
+│   │                       │   │   MobOrderManager.class
+│   │                       │   │
+│   │                       │   └───goal
+│   │                       │           AttackTargetGoal.class
+│   │                       │           DirectApproachGoal.class
+│   │                       │           DirectTargetGoal.class
+│   │                       │           FollowOwnerMobGoal.class
+│   │                       │           ManagedGoal.class
+│   │                       │           NativeTargetStashGoal.class
+│   │                       │           ProtectTargetGoal$Role.class
+│   │                       │           ProtectTargetGoal.class
+│   │                       │           StayPutGoal.class
+│   │                       │           TargetGuardGoal.class
+│   │                       │
 │   │                       ├───block
 │   │                       │       MobJarBlock.class
 │   │                       │       MobJarBlockEntity.class
 │   │                       │
 │   │                       ├───client
+│   │                       │   ├───pokedex
+│   │                       │   │       ClientPokedexData$Discovery.class
+│   │                       │   │       ClientPokedexData.class
+│   │                       │   │       ClientPokedexHandler.class
+│   │                       │   │       Dropdown$Option.class
+│   │                       │   │       Dropdown.class
+│   │                       │   │       MobCatalog$TabInfo.class
+│   │                       │   │       MobCatalog.class
+│   │                       │   │       MobEntry.class
+│   │                       │   │       PokedexButton.class
+│   │                       │   │       PokedexScreen$DragMode.class
+│   │                       │   │       PokedexScreen$DragResult.class
+│   │                       │   │       PokedexScreen$LockState.class
+│   │                       │   │       PokedexScreen$SortKey.class
+│   │                       │   │       PokedexScreen$Tab.class
+│   │                       │   │       PokedexScreen.class
+│   │                       │   │       PokedexUi.class
+│   │                       │   │
 │   │                       │   └───renderer
 │   │                       │           MobJarRenderer.class
 │   │                       │
@@ -111,15 +159,44 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │                       │       PokeballProjectileEntity.class
 │   │                       │
 │   │                       ├───event
+│   │                       │       ClientForgeEvents.class
 │   │                       │       ClientModEvents.class
+│   │                       │       ClientPokedexEvents.class
+│   │                       │       EntityConfigEvents.class
 │   │                       │       ModEventHandlers.class
+│   │                       │       PokedexEventHandlers.class
 │   │                       │
-│   │                       └───item
-│   │                               MobJarBlockItem.class
-│   │                               PokeballItem$Tier.class
-│   │                               PokeballItem.class
-│   │                               QuiverItem$1.class
-│   │                               QuiverItem.class
+│   │                       ├───item
+│   │                       │       CapturedMobStats$CacheEntry.class
+│   │                       │       CapturedMobStats$Equipped.class
+│   │                       │       CapturedMobStats$Stats.class
+│   │                       │       CapturedMobStats.class
+│   │                       │       MobJarBlockItem.class
+│   │                       │       PokeballItem$Tier.class
+│   │                       │       PokeballItem.class
+│   │                       │       QuiverItem$1.class
+│   │                       │       QuiverItem.class
+│   │                       │
+│   │                       ├───network
+│   │                       │       CancelDirectAttackPayload.class
+│   │                       │       DirectAttackRequestPayload.class
+│   │                       │       EntityConfigEditPayload.class
+│   │                       │       EntityConfigSavePayload.class
+│   │                       │       EntityConfigSyncPayload$1.class
+│   │                       │       EntityConfigSyncPayload.class
+│   │                       │       ModNetwork.class
+│   │                       │       PokedexRequestPayload.class
+│   │                       │       PokedexSyncPayload$1.class
+│   │                       │       PokedexSyncPayload$Sync.class
+│   │                       │       PokedexSyncPayload.class
+│   │                       │
+│   │                       └───pokedex
+│   │                               CaptureRules.class
+│   │                               EntityConfig.class
+│   │                               MobKind.class
+│   │                               PokedexData$Entry.class
+│   │                               PokedexData.class
+│   │                               PokedexManager.class
 │   │
 │   ├───generated
 │   │   └───sources
@@ -134,7 +211,7 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │                   neoforge.mods.toml
 │   │
 │   ├───libs
-│   │       pokecraft-1.0.19.1.jar
+│   │       pokecraft-1.0.21.5.jar
 │   │
 │   ├───moddev
 │   │   └───artifacts
@@ -144,6 +221,11 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │           neoforge-21.1.262.jar
 │   │
 │   ├───reports
+│   │   ├───configuration-cache
+│   │   │   └───5q828ghtetg4ihp988dwwsqw3
+│   │   │       └───a9xahr42c7juxhd3ay6auwf3i
+│   │   │               configuration-cache-report.html
+│   │   │
 │   │   └───problems
 │   │           problems-report.html
 │   │
@@ -173,6 +255,9 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │   │       │       │
 │   │       │       └───textures
 │   │       │           ├───font
+│   │       │           ├───gui
+│   │       │           │       pokedex_button.png
+│   │       │           │
 │   │       │           └───item
 │   │       │                   greatball.png
 │   │       │                   masterball.png
@@ -208,10 +293,10 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
 │       │       MANIFEST.MF
 │       │
 │       └───neoformruntime
-│           ├───20261107-010727_downloadClient
-│           ├───20261107-010727_downloadClientMappings
-│           ├───20261107-010727_downloadJson
-│           └───20261107-010727_downloadServer
+│           ├───20261110-015141_downloadClient
+│           ├───20261110-015141_downloadClientMappings
+│           ├───20261110-015141_downloadJson
+│           └───20261110-015141_downloadServer
 ├───estructura
 │       ProjectStructure.txt
 │
@@ -228,11 +313,37 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
         │           └───pokecraft
         │               │   PokeCraftMod.java
         │               │
+        │               ├───ai
+        │               │   │   DirectAttackManager.java
+        │               │   │   MobOrder.java
+        │               │   │   MobOrderManager.java
+        │               │   │
+        │               │   └───goal
+        │               │           AttackTargetGoal.java
+        │               │           DirectApproachGoal.java
+        │               │           DirectTargetGoal.java
+        │               │           FollowOwnerMobGoal.java
+        │               │           ManagedGoal.java
+        │               │           NativeTargetStashGoal.java
+        │               │           ProtectTargetGoal.java
+        │               │           StayPutGoal.java
+        │               │           TargetGuardGoal.java
+        │               │
         │               ├───block
         │               │       MobJarBlock.java
         │               │       MobJarBlockEntity.java
         │               │
         │               ├───client
+        │               │   ├───pokedex
+        │               │   │       ClientPokedexData.java
+        │               │   │       ClientPokedexHandler.java
+        │               │   │       Dropdown.java
+        │               │   │       MobCatalog.java
+        │               │   │       MobEntry.java
+        │               │   │       PokedexButton.java
+        │               │   │       PokedexScreen.java
+        │               │   │       PokedexUi.java
+        │               │   │
         │               │   └───renderer
         │               │           MobJarRenderer.java
         │               │           MobJarRenderer.java_bugs.txt
@@ -241,13 +352,35 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
         │               │       PokeballProjectileEntity.java
         │               │
         │               ├───event
+        │               │       ClientForgeEvents.java
         │               │       ClientModEvents.java
+        │               │       ClientPokedexEvents.java
+        │               │       EntityConfigEvents.java
         │               │       ModEventHandlers.java
+        │               │       PokedexEventHandlers.java
         │               │
-        │               └───item
-        │                       MobJarBlockItem.java
-        │                       PokeballItem.java
-        │                       QuiverItem.java
+        │               ├───item
+        │               │       CapturedMobStats.java
+        │               │       MobJarBlockItem.java
+        │               │       PokeballItem.java
+        │               │       QuiverItem.java
+        │               │
+        │               ├───network
+        │               │       CancelDirectAttackPayload.java
+        │               │       DirectAttackRequestPayload.java
+        │               │       EntityConfigEditPayload.java
+        │               │       EntityConfigSavePayload.java
+        │               │       EntityConfigSyncPayload.java
+        │               │       ModNetwork.java
+        │               │       PokedexRequestPayload.java
+        │               │       PokedexSyncPayload.java
+        │               │
+        │               └───pokedex
+        │                       CaptureRules.java
+        │                       EntityConfig.java
+        │                       MobKind.java
+        │                       PokedexData.java
+        │                       PokedexManager.java
         │
         ├───resources
         │   ├───assets
@@ -274,6 +407,9 @@ D:\ARCHIVOS\DOCUMENTOS\GITHUB\POKECRAFT
         │   │       │
         │   │       └───textures
         │   │           ├───font
+        │   │           ├───gui
+        │   │           │       pokedex_button.png
+        │   │           │
         │   │           └───item
         │   │                   greatball.png
         │   │                   masterball.png
