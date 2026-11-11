@@ -16,7 +16,6 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.Bucketable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -307,7 +306,8 @@ public class ModEventHandlers {
         boolean isOwner = player.getUUID().equals(MobOrderManager.getOwnerId(mob));
         boolean holdsStick = player.getMainHandItem().is(Items.STICK) || player.getOffhandItem().is(Items.STICK);
 
-        boolean storage = mob instanceof Bucketable && event.getItemStack().is(Items.WATER_BUCKET);
+        // Almacenamiento vanilla: peces, ajolotes y renacuajos se recogen con un cubo de agua.
+        boolean storage = event.getItemStack().is(Items.WATER_BUCKET);
         boolean leash = event.getItemStack().is(Items.LEAD);
         boolean ownerPickup = isOwner && player.isShiftKeyDown() && !player.getMainHandItem().is(Items.STICK);
         boolean ownerOrder = isOwner && !player.isShiftKeyDown() && holdsStick;
