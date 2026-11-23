@@ -1,7 +1,5 @@
 package com.jose.pokecraft.ai;
 
-import com.jose.pokecraft.pokedex.MobStrengthManager;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -20,10 +18,10 @@ import java.util.UUID;
  * Indicador de modo al apuntar con el palo (mano principal) a un aliado propio.
  *
  * Se resuelve en el SERVIDOR porque el modo vive en el NBT persistente del mob, que no se sincroniza al cliente.
- * Muestra el modo en la misma zona que los mensajes de cambio de modo (barra de acción) como un PULSO único:
- * solo cuando la mirada pasa a posarse sobre una entidad distinta de la anterior. Mantener la mirada fija no lo
- * repite; apartarla (a otra entidad, al vacío, o guardar el palo) reinicia el estado, así que volver a mirar al
- * mismo mob lo muestra otra vez.
+ * Muestra el modo y, debajo, el estado PVP/PVE (dos líneas independientes, ver {@link MobStatusDisplay}) como un
+ * PULSO único: solo cuando la mirada pasa a posarse sobre una entidad distinta de la anterior. Mantener la mirada
+ * fija no lo repite; apartarla (a otra entidad, al vacío, o guardar el palo) reinicia el estado, así que volver a
+ * mirar al mismo mob lo muestra otra vez.
  */
 public final class LookIndicatorManager {
     /** Alcance de la mirada, en bloques. */
@@ -47,21 +45,12 @@ public final class LookIndicatorManager {
                 : LAST_LOOKED.put(player.getUUID(), lookedId);
 
         if (looked != null && !lookedId.equals(previous)) {
-            show(player, looked);
+            MobStatusDisplay.showLook(player, looked);
         }
     }
 
     public static void forget(UUID playerId) {
         LAST_LOOKED.remove(playerId);
-    }
-
-    private static void show(ServerPlayer player, Mob mob) {
-        Component mode = MobOrderManager.isVengeance(mob)
-                ? Component.translatable("pokecraft.order.vengeance")
-                : MobOrderManager.getOrder(mob).displayName();
-        // Nombre con el color de su categoría de fortaleza (respeta el nombre personalizado si lo tiene).
-        Component name = MobStrengthManager.coloredName(mob, mob.getDisplayName());
-        player.displayClientMessage(Component.translatable("message.pokecraft.order_look", name, mode), true);
     }
 
     /**

@@ -1,15 +1,15 @@
 package com.jose.pokecraft.event;
- 
+
 import com.jose.pokecraft.PokeCraftMod;
 import com.jose.pokecraft.ai.DirectAttackManager;
 import com.jose.pokecraft.ai.MobOrder;
 import com.jose.pokecraft.ai.LookIndicatorManager;
 import com.jose.pokecraft.ai.MobOrderManager;
+import com.jose.pokecraft.ai.MobStatusDisplay;
 import com.jose.pokecraft.ai.VengeanceManager;
 import com.jose.pokecraft.item.CapturedBall;
 import com.jose.pokecraft.item.PokeballItem;
 import com.jose.pokecraft.pokedex.CaptureRules;
-import com.jose.pokecraft.pokedex.MobStrengthManager;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -40,12 +40,12 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
- 
+
 import java.util.UUID;
- 
+
 @EventBusSubscriber(modid = PokeCraftMod.MOD_ID)
 public class ModEventHandlers {
- 
+
     /**
      * Las metas (Goal) no se serializan: tras cargar un chunk, reiniciar el servidor, cambiar de dimensión o
      * liberar el mob desde la bola, el mob vuelve con su IA vanilla. Aquí se reinstala la IA del modo guardado.
@@ -57,12 +57,13 @@ public class ModEventHandlers {
             MobOrderManager.apply(mob, MobOrderManager.getOrder(mob));
         }
     }
- 
+
     /**
      * Filtro previo a cualquier cambio de objetivo de un mob de PokeCraft, venga de donde venga (metas nativas,
      * ira de neutrales, otros mods): si el modo actual no permite ese objetivo (cualquiera en Seguir/Quieto;
-     * el dueño y sus aliados en el resto), se sustituye por "sin objetivo". Es lo que permite que el modo
-     * Libre conserve la IA nativa sin que el mob llegue a apuntar al dueño ni un instante.
+     * el dueño y sus aliados en el resto; y en PVE tampoco jugadores ni aliados de otros jugadores), se sustituye
+     * por "sin objetivo". Es lo que permite que el modo Libre conserve la IA nativa sin que el mob llegue a
+     * apuntar al dueño ni un instante.
      */
     @SubscribeEvent
     public static void onLivingChangeTarget(LivingChangeTargetEvent event) {
@@ -73,28 +74,50 @@ public class ModEventHandlers {
             event.setNewAboutToBeSetTarget(null);
         }
     }
- 
+
     // ---------------------------------------------------------------------------------------------
     // Órdenes con el palo en la mano principal
     // ---------------------------------------------------------------------------------------------
- 
+
     /**
-     * Clic izquierdo con el palo sobre una entidad: ataque directo de todos los aliados. Shift + clic izquierdo:
-     * cancelarlo. El evento NO se cancela, así que el golpe y la animación vanilla del jugador se ejecutan igual.
+     * Clic izquierdo con el palo en la mano principal:
+     *  - Con Shift: cancela el ataque directo (el golpe vanilla no se toca).
+     *  - Sobre un aliado propio en modo Quieto: no se alterna nada; el golpe vanilla funciona como daño normal.
+     *  - Sobre un aliado propio en cualquier otro modo: alterna su estado PVP/PVE (se guarda en sus datos
+     *    persistentes y viaja con la bola / el tarro) y se cancela el golpe.
+     *  - Sobre cualquier otra entidad: ataque directo de todos los aliados (el golpe vanilla se ejecuta igual).
      * (Con el palo en la mano secundaria no se hace nada: el ataque siempre usa la mano principal.)
      */
     @SubscribeEvent
     public static void onAttackEntity(AttackEntityEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!player.getMainHandItem().is(Items.STICK)) return;
- 
+
         if (player.isShiftKeyDown()) {
             DirectAttackManager.cancelDirectAttack(player);
-        } else {
-            DirectAttackManager.startDirectAttack(player, event.getTarget());
+            return;
         }
+
+        // Los mobs multi-parte reciben el golpe en una PartEntity: se sube al padre.
+        LivingEntity clicked = CaptureRules.resolveTarget(event.getTarget());
+        if (clicked instanceof Mob ally
+                && MobOrderManager.isFriendly(ally)
+                && !MobOrderManager.isVengeance(ally)
+                && player.getUUID().equals(MobOrderManager.getOwnerId(ally))) {
+            // Quieto: el clic es un golpe normal (el dueño solo puede dañar a su aliado en este modo).
+            if (MobOrderManager.getOrder(ally) == MobOrder.STAY) return;
+
+            boolean pvp = MobOrderManager.togglePvp(ally);
+            MobStatusDisplay.showPvpToggled(player, ally, pvp);
+            event.getEntity().level().playSound(null, ally.blockPosition(),
+                    SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.8f, pvp ? 0.8f : 1.4f);
+            event.setCanceled(true);
+            return;
+        }
+
+        DirectAttackManager.startDirectAttack(player, event.getTarget());
     }
- 
+
     /** Shift + clic izquierdo con el palo sobre un bloque: también cancela (no hace falta apuntar a una entidad). */
     @SubscribeEvent
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
@@ -104,7 +127,7 @@ public class ModEventHandlers {
             DirectAttackManager.cancelDirectAttack(player);
         }
     }
- 
+
     /**
      * Shift + clic derecho con el palo: "Todos quietos". RightClickItem se dispara una vez por mano; solo se
      * procesa la principal. Se dispara tanto al aire como apuntando a un bloque o a una entidad (el cliente
@@ -118,13 +141,13 @@ public class ModEventHandlers {
             DirectAttackManager.stayAll(player);
         }
     }
- 
+
     /** Reinstala el modo de los mobs cuyo ataque directo terminó (no se puede hacer dentro del tick de sus metas). */
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         MobOrderManager.flushPendingRefresh();
     }
- 
+
     @SubscribeEvent
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (event.getLevel().isClientSide()) return;
@@ -132,49 +155,50 @@ public class ModEventHandlers {
         ItemStack mainHand = player.getMainHandItem();
         ItemStack offHand = player.getOffhandItem();
         ItemStack heldItem = event.getItemStack();
- 
+
         // Los mobs multi-parte (Ender Dragon, Ice Spider...) reciben el clic en una PartEntity: se sube al padre.
         LivingEntity target = CaptureRules.resolveTarget(event.getTarget());
         if (target != null) {
             CompoundTag persistent = target.getPersistentData();
- 
+
             // Verificar que sea un aliado leal de este jugador
             if (!persistent.contains("PokeCraftFriendly")) return;
             if (!player.getUUID().equals(persistent.getUUID("OwnerUUID"))) return;
- 
+
             // Shift + palo en la mano principal es la orden "Todos quietos" (se resuelve en onRightClickItem, que el
             // cliente dispara a continuación porque aquí no se consume la interacción). Tiene prioridad sobre
             // recuperar al mob; para recuperarlo hay que agacharse con cualquier otro objeto o con la mano vacía.
             if (player.isShiftKeyDown() && mainHand.is(Items.STICK)) return;
- 
+
             // 1. RECUPERAR AL MOB: Solo si el jugador está agachado (Shift + Clic derecho)
             if (player.isShiftKeyDown()) {
                 CompoundTag entityTag = new CompoundTag();
                 target.save(entityTag);
                 entityTag.remove("UUID");
- 
-                // La bola de origen viaja en los datos persistentes del mob ("NeoForgeData"), que target.save()
-                // ya incluye en el NBT. CapturedBall la lee de ahí y la graba también en la clave de primer nivel
-                // que usan el tarro y los tooltips (sin ella el tarro devolvía siempre una Poké Ball básica).
+
+                // La bola de origen, el modo y el estado PVP/PVE viajan en los datos persistentes del mob
+                // ("NeoForgeData"), que target.save() ya incluye en el NBT. CapturedBall lee de ahí la bola y la graba
+                // también en la clave de primer nivel que usan el tarro y los tooltips (sin ella el tarro devolvía
+                // siempre una Poké Ball básica).
                 ItemStack filledPokeball = CapturedBall.createFilled(CapturedBall.resolve(entityTag), entityTag,
                         target.hasCustomName() ? target.getCustomName() : null);
- 
+
                 if (!player.addItem(filledPokeball)) {
                     player.drop(filledPokeball, false);
                 }
- 
+
                 event.getLevel().playSound(null, target.blockPosition(), SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 1.0f, 1.0f);
                 target.discard();
- 
+
                 event.setCancellationResult(InteractionResult.SUCCESS);
                 event.setCanceled(true);
                 return;
             }
- 
+
             // 2. DAR ÓRDENES TÁCTICAS CON EL PALO (Mano principal o secundaria)
             boolean mainHasStick = mainHand.is(Items.STICK);
             boolean offHasStick = offHand.is(Items.STICK);
- 
+
             if (mainHasStick || offHasStick) {
                 // Vanilla envía UN paquete de interacción POR MANO por cada clic derecho (el cliente no
                 // consume la interacción, así que prueba main hand y luego off hand). Hay que cambiar de modo
@@ -182,33 +206,32 @@ public class ModEventHandlers {
                 // mano principal avanzaba el ciclo DOS veces y con 4 modos solo se veían 2 de ellos.
                 boolean handlesThisEvent = event.getItemStack().is(Items.STICK)
                         && (event.getHand() == InteractionHand.MAIN_HAND || !mainHasStick);
- 
+
                 if (!handlesThisEvent) {
                     // Evento de la otra mano: se absorbe sin hacer nada (evita acciones vanilla con esa mano).
                     event.setCancellationResult(InteractionResult.SUCCESS);
                     event.setCanceled(true);
                     return;
                 }
- 
+
                 // Las órdenes solo tienen sentido en Mob (los que tienen IA de metas)
                 if (target instanceof Mob mob) {
-                    // Cambia al siguiente modo (seguir -> quieto -> proteger -> ataque), lo guarda en el NBT
-                    // persistente y reinstala la IA del mob en el mismo tick.
+                    // Cambia al siguiente modo (seguir -> quieto -> proteger -> ataque -> libre), lo guarda en el NBT
+                    // persistente y reinstala la IA del mob en el mismo tick. El estado PVP/PVE no se toca.
                     MobOrder newOrder = MobOrderManager.cycleOrder(mob);
- 
-                    // Nombre con el color de su categoría de fortaleza (respeta el nombre personalizado si lo tiene).
-                    Component mobName = MobStrengthManager.coloredName(target,
-                            target.hasCustomName() ? target.getCustomName() : target.getDisplayName());
-                    player.displayClientMessage(
-                            Component.translatable("message.pokecraft.order_changed", mobName, newOrder.displayName()), true);
- 
+
+                    // Dos líneas independientes: el modo y, debajo, el estado PVP/PVE.
+                    if (player instanceof ServerPlayer serverPlayer) {
+                        MobStatusDisplay.showOrderChanged(serverPlayer, mob, newOrder);
+                    }
+
                     event.getLevel().playSound(null, target.blockPosition(), SoundEvents.NOTE_BLOCK_PLING.value(), SoundSource.PLAYERS, 0.8f, 1.2f);
                 }
                 event.setCancellationResult(InteractionResult.SUCCESS);
                 event.setCanceled(true);
                 return;
             }
- 
+
             // 3. CURAR AL MOB CON COMIDA (si sostiene comida válida)
             FoodProperties food = heldItem.getFoodProperties(target);
             if (food != null && target.getHealth() < target.getMaxHealth()) {
@@ -221,19 +244,32 @@ public class ModEventHandlers {
                 event.setCanceled(true);
                 return;
             }
- 
+
             // 4. SI NO TIENE PALO, NO SE DA SHIFT Y NO ES COMIDA -> NO SUCEDE NADA
             //event.setCancellationResult(InteractionResult.SUCCESS);
             //event.setCanceled(true);
         }
     }
- 
+
     // Prevenir que los mobs aliados ataquen a su dueño y limpiar su objetivo hostil
     @SubscribeEvent
     public static void onLivingIncomingDamage(LivingIncomingDamageEvent event) {
         LivingEntity victim = event.getEntity();
         Entity attacker = event.getSource().getEntity();
         if (attacker == null || attacker == victim) return;
+
+        // 0. PVE: un aliado en PVE (que no esté en Venganza) nunca daña a jugadores ni a aliados capturados de otros
+        //    jugadores, ni siquiera por accidente (explosiones, flechas, daño de área...). getEntity() ya resuelve
+        //    al dueño de proyectiles. Se limpia su objetivo para que no insista.
+        if (attacker instanceof Mob allyAttacker
+                && MobOrderManager.isFriendly(allyAttacker)
+                && !MobOrderManager.isVengeance(allyAttacker)
+                && !MobOrderManager.isPvp(allyAttacker)
+                && MobOrderManager.isPvpProtected(victim)) {
+            event.setCanceled(true);
+            allyAttacker.setTarget(null);
+            return;
+        }
 
         // 1. Aliado -> su dueño: sin daño. Excepción: un mob en Modo Venganza SÍ puede dañar a su dueño.
         if (victim instanceof Player player) {
@@ -259,7 +295,8 @@ public class ModEventHandlers {
             // El dueño solo puede dañar a su aliado si está estrictamente en modo "quieto".
             block = MobOrderManager.getOrder(victim) != MobOrder.STAY;
         } else {
-            // Aliados del MISMO dueño no se dañan entre sí. Con dueños distintos el combate es normal.
+            // Aliados del MISMO dueño no se dañan entre sí. Con dueños distintos el combate es normal
+            // (salvo que el atacante esté en PVE, que ya se bloqueó arriba).
             block = MobOrderManager.isFriendly(attacker)
                     && !MobOrderManager.isVengeance(attacker)
                     && ownerId.equals(MobOrderManager.getOwnerId(attacker));
@@ -331,7 +368,7 @@ public class ModEventHandlers {
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         LookIndicatorManager.forget(event.getEntity().getUUID());
     }
- 
+
     // Sincronización de nombre en Yunque
     @SubscribeEvent
     public static void onAnvilUpdate(AnvilUpdateEvent event) {
@@ -344,7 +381,7 @@ public class ModEventHandlers {
                     ItemStack output = left.copy();
                     Component newName = Component.literal(event.getName());
                     output.set(DataComponents.CUSTOM_NAME, newName);
- 
+
                     CompoundTag entityTag = tag.getCompound("CapturedEntity");
                     var registries = ServerLifecycleHooks.getCurrentServer() != null ?
                         ServerLifecycleHooks.getCurrentServer().registryAccess() : null;
@@ -353,7 +390,7 @@ public class ModEventHandlers {
                     }
                     tag.put("CapturedEntity", entityTag);
                     output.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
- 
+
                     event.setOutput(output);
                     event.setCost(5);
                     event.setMaterialCost(1);

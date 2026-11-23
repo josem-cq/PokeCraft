@@ -1,6 +1,7 @@
 package com.jose.pokecraft.item;
- 
+
 import com.jose.pokecraft.ai.MobOrderManager;
+import com.jose.pokecraft.ai.MobStatusDisplay;
 import com.jose.pokecraft.pokedex.MobStrengthManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.Holder;
@@ -30,11 +31,11 @@ import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
- 
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
- 
+
 /**
  * Cálculo universal de estadísticas (Salud, Armadura, Daño) de un mob capturado a partir de su NBT,
  * para usarse en los tooltips de las Poké Balls y los Mob Jars.
@@ -56,28 +57,28 @@ public final class CapturedMobStats {
     /** El motor limita el total de puntos de protección de encantamientos a 20 (reducción máxima del 80%). */
     private static final float MAX_ENCHANT_PROTECTION = 20.0f;
     private static final RandomSource ENCHANT_RANDOM = RandomSource.create(0L);
- 
+
     private CapturedMobStats() {}
- 
+
     public record Stats(float health, double maxHealth, float absorption, double armor, boolean hasAttack, double attackDamage) {}
- 
+
     private record Equipped(EquipmentSlot slot, ItemStack stack) {}
- 
+
     private record CacheEntry(CompoundTag tag, @Nullable HolderLookup.Provider registries, Stats stats) {}
- 
+
     // Los tooltips se reconstruyen cada frame mientras el ratón está encima: se cachea el último resultado.
     private static volatile CacheEntry cache;
- 
+
     // ------------------------------------------------------------------------------------------------
     // Cálculo
     // ------------------------------------------------------------------------------------------------
- 
+
     public static Stats compute(CompoundTag entityTag, @Nullable HolderLookup.Provider registries) {
         CacheEntry cached = cache;
         if (cached != null && cached.registries() == registries && cached.tag().equals(entityTag)) {
             return cached.stats();
         }
- 
+
         Stats stats;
         try {
             stats = computeUncached(entityTag, registries);
@@ -86,14 +87,14 @@ public final class CapturedMobStats {
             float health = entityTag.contains("Health", Tag.TAG_ANY_NUMERIC) ? entityTag.getFloat("Health") : 20f;
             stats = new Stats(health, Math.max(health, 1.0f), 0f, 0.0, false, 0.0);
         }
- 
+
         cache = new CacheEntry(entityTag.copy(), registries, stats);
         return stats;
     }
- 
+
     private static Stats computeUncached(CompoundTag entityTag, @Nullable HolderLookup.Provider registries) {
         EntityType<?> type = getEntityType(entityTag);
- 
+
         // 1. Atributos: valores base del tipo + atributos y modificadores permanentes guardados en el NBT.
         AttributeMap attributes = new AttributeMap(supplierFor(type));
         ListTag saved = entityTag.getList("attributes", Tag.TAG_COMPOUND);
@@ -101,7 +102,7 @@ public final class CapturedMobStats {
             saved = entityTag.getList("Attributes", Tag.TAG_COMPOUND);
         }
         attributes.load(saved);
- 
+
         // 2. Equipamiento: sus modificadores de atributo (armadura, daño, salud, etc.) como en LivingEntity.
         List<Equipped> equipment = registries != null ? readEquipment(entityTag, registries) : List.of();
         for (Equipped equipped : equipment) {
@@ -113,16 +114,16 @@ public final class CapturedMobStats {
                 }
             });
         }
- 
+
         // 3. Salud
         double maxHealth = valueOf(attributes, Attributes.MAX_HEALTH, 20.0);
         float health = entityTag.contains("Health", Tag.TAG_ANY_NUMERIC) ? entityTag.getFloat("Health") : (float) maxHealth;
         float absorption = entityTag.contains("AbsorptionAmount", Tag.TAG_ANY_NUMERIC) ? entityTag.getFloat("AbsorptionAmount") : 0f;
- 
+
         // 4. Armadura: atributo final + puntos de protección de encantamientos de las piezas equipadas.
         //    (1 punto de protección de encantamiento = 1/25 de reducción, igual que 1 punto de armadura.)
         double armor = valueOf(attributes, Attributes.ARMOR, 0.0) + enchantProtection(equipment);
- 
+
         // 5. Daño: atributo final (incluye el arma de la mano principal) + bonus de encantamientos del arma.
         boolean hasAttack = attributes.hasAttribute(Attributes.ATTACK_DAMAGE);
         double attack = 0.0;
@@ -134,10 +135,10 @@ public final class CapturedMobStats {
                 }
             }
         }
- 
+
         return new Stats(health, maxHealth, absorption, armor, hasAttack, attack);
     }
- 
+
     @SuppressWarnings("unchecked")
     private static AttributeSupplier supplierFor(@Nullable EntityType<?> type) {
         if (type != null && DefaultAttributes.hasSupplier(type)) {
@@ -145,35 +146,35 @@ public final class CapturedMobStats {
         }
         return AttributeSupplier.builder().build();
     }
- 
+
     private static double valueOf(AttributeMap map, Holder<Attribute> attribute, double fallback) {
         return map.hasAttribute(attribute) ? map.getValue(attribute) : fallback;
     }
- 
+
     // ------------------------------------------------------------------------------------------------
     // Equipamiento
     // ------------------------------------------------------------------------------------------------
- 
+
     private static List<Equipped> readEquipment(CompoundTag entityTag, HolderLookup.Provider registries) {
         List<Equipped> result = new ArrayList<>();
- 
+
         ListTag hand = entityTag.getList("HandItems", Tag.TAG_COMPOUND);
         for (int i = 0; i < hand.size() && i < 2; i++) {
             addIfPresent(result, i == 0 ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND, hand.getCompound(i), registries);
         }
- 
+
         ListTag armor = entityTag.getList("ArmorItems", Tag.TAG_COMPOUND);
         for (int i = 0; i < armor.size() && i < ARMOR_SLOTS.length; i++) {
             addIfPresent(result, ARMOR_SLOTS[i], armor.getCompound(i), registries);
         }
- 
+
         // Armadura corporal (caballos, lobos...)
         if (entityTag.contains("body_armor_item", Tag.TAG_COMPOUND)) {
             addIfPresent(result, EquipmentSlot.BODY, entityTag.getCompound("body_armor_item"), registries);
         }
         return result;
     }
- 
+
     private static void addIfPresent(List<Equipped> list, EquipmentSlot slot, CompoundTag itemTag, HolderLookup.Provider registries) {
         if (itemTag.isEmpty()) return;
         ItemStack stack = ItemStack.parseOptional(registries, itemTag);
@@ -181,7 +182,7 @@ public final class CapturedMobStats {
             list.add(new Equipped(slot, stack));
         }
     }
- 
+
     // ------------------------------------------------------------------------------------------------
     // Encantamientos (efectos data-driven, sin listas de nombres)
     //
@@ -190,7 +191,7 @@ public final class CapturedMobStats {
     // así que por pieza/arma se toma el mayor efecto individual (los encantamientos de protección son
     // mutuamente exclusivos en el juego base) en lugar de sumarlos todos.
     // ------------------------------------------------------------------------------------------------
- 
+
     private static double enchantProtection(List<Equipped> equipment) {
         float total = 0f;
         for (Equipped equipped : equipment) {
@@ -199,7 +200,7 @@ public final class CapturedMobStats {
         }
         return Math.min(total, MAX_ENCHANT_PROTECTION);
     }
- 
+
     private static float bestProtection(ItemStack stack) {
         ItemEnchantments enchantments = stack.getOrDefault(DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
         float best = 0f;
@@ -216,7 +217,7 @@ public final class CapturedMobStats {
         }
         return best;
     }
- 
+
     private static float enchantDamageBonus(ItemStack weapon, float baseDamage) {
         ItemEnchantments enchantments = weapon.getOrDefault(DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
         float best = 0f;
@@ -233,11 +234,11 @@ public final class CapturedMobStats {
         }
         return best;
     }
- 
+
     // ------------------------------------------------------------------------------------------------
     // Utilidades de tooltip
     // ------------------------------------------------------------------------------------------------
- 
+
     /** Devuelve el tipo de entidad del NBT, o null si no existe (no cae al valor por defecto del registro). */
     @Nullable
     public static EntityType<?> getEntityType(CompoundTag entityTag) {
@@ -246,7 +247,7 @@ public final class CapturedMobStats {
         if (location == null) return null;
         return BuiltInRegistries.ENTITY_TYPE.getOptional(location).orElse(null);
     }
- 
+
     /** Nombre SIN colorear de la categoría de fortaleza (compatibilidad); ver la sobrecarga con nivel. */
     public static Component getDisplayName(CompoundTag entityTag, @Nullable EntityType<?> type, @Nullable HolderLookup.Provider registries) {
         return getDisplayName(entityTag, type, registries, null);
@@ -283,38 +284,40 @@ public final class CapturedMobStats {
         }
         return type != null ? type.getDescription() : Component.literal("Desconocido");
     }
- 
+
     private static Component getBallName(CompoundTag entityTag) {
         // Misma resolución que usan el tarro y la recogida (primer nivel -> NeoForgeData -> Poké Ball básica).
         return CapturedBall.resolve(entityTag).getDescription();
     }
- 
+
     /**
-     * Añade al tooltip: nombre (coloreado por categoría de fortaleza), (opcionalmente) Poké Ball de origen, Salud,
-     * Armadura, Daño, efectos activos e ID técnico.
+     * Añade al tooltip: nombre (coloreado por categoría de fortaleza), (opcionalmente) Poké Ball de origen, Modo con
+     * su estado PVE/PVP, Salud, Armadura, Daño, efectos activos e ID técnico.
      */
     public static void appendTooltip(List<Component> tooltip, CompoundTag entityTag, Item.TooltipContext context, boolean includeBall) {
         HolderLookup.Provider registries = context.registries();
         EntityType<?> type = getEntityType(entityTag);
- 
+
         tooltip.add(Component.literal("§aContiene: §f").append(getDisplayName(entityTag, type, registries, context.level())));
         if (includeBall) {
             tooltip.add(Component.literal("§7Bola: §f").append(getBallName(entityTag)));
         }
 
-        // Modo con el que saldrá el mob al liberarse (siguiendo / quieto / proteger...), leído del propio NBT.
+        // Modo con el que saldrá el mob al liberarse (siguiendo / quieto / proteger...) y, tras una coma, su estado
+        // PVE/PVP. Ambos se leen del propio NBT y son independientes entre sí: "Modo: siguiendo, PVE".
         tooltip.add(Component.translatable("tooltip.pokecraft.mode",
-                        MobOrderManager.getOrderFromSavedEntity(entityTag).displayName().copy().withStyle(ChatFormatting.WHITE))
+                        MobOrderManager.getOrderFromSavedEntity(entityTag).displayName().copy().withStyle(ChatFormatting.WHITE),
+                        MobStatusDisplay.pvpLabel(MobOrderManager.isPvpFromSavedEntity(entityTag)))
                 .withStyle(ChatFormatting.GRAY));
 
         appendStatLines(tooltip, compute(entityTag, registries));
         appendActiveEffects(tooltip, entityTag);
- 
+
         if (entityTag.contains("id", Tag.TAG_STRING)) {
             tooltip.add(Component.literal("§7ID: " + entityTag.getString("id")));
         }
     }
- 
+
     private static void appendStatLines(List<Component> tooltip, Stats stats) {
         String healthStr = "§7Salud: §f" + (int) Math.ceil(stats.health()) + " / " + (int) Math.ceil(stats.maxHealth());
         if (stats.absorption() > 0f) {
@@ -322,7 +325,7 @@ public final class CapturedMobStats {
         }
         healthStr += " §c❤";
         tooltip.add(Component.literal(healthStr));
- 
+
         if (stats.armor() > 0.0) {
             tooltip.add(Component.literal("§7Armadura: §f" + format(stats.armor()) + " 🛡"));
         }
@@ -330,7 +333,7 @@ public final class CapturedMobStats {
             tooltip.add(Component.literal("§7Daño: §f" + format(stats.attackDamage()) + " ⚔"));
         }
     }
- 
+
     private static void appendActiveEffects(List<Component> tooltip, CompoundTag entityTag) {
         ListTag effects = null;
         if (entityTag.contains("active_effects", Tag.TAG_LIST)) {
@@ -339,13 +342,13 @@ public final class CapturedMobStats {
             effects = entityTag.getList("ActiveEffects", Tag.TAG_COMPOUND);
         }
         if (effects == null || effects.isEmpty()) return;
- 
+
         tooltip.add(Component.literal("§7Efectos activos:"));
         for (int i = 0; i < effects.size(); i++) {
             CompoundTag effectTag = effects.getCompound(i);
             String effectId = effectTag.getString("id");
             int amplifier = effectTag.getInt("amplifier");
- 
+
             Component effectName = Component.literal(effectId);
             ResourceLocation location = ResourceLocation.tryParse(effectId);
             if (location != null) {
@@ -357,7 +360,7 @@ public final class CapturedMobStats {
             tooltip.add(Component.literal(" §7- ").append(effectName).append(" (Nivel " + (amplifier + 1) + ")"));
         }
     }
- 
+
     private static String format(double value) {
         double rounded = Math.rint(value);
         if (Math.abs(value - rounded) < 0.05) {

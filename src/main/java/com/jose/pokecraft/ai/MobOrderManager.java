@@ -1,5 +1,5 @@
 package com.jose.pokecraft.ai;
- 
+
 import com.jose.pokecraft.ai.goal.AttackTargetGoal;
 import com.jose.pokecraft.ai.goal.DirectApproachGoal;
 import com.jose.pokecraft.ai.goal.DirectTargetGoal;
@@ -23,26 +23,32 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
- 
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
- 
+
 /**
  * Gestor central de órdenes. Es el ÚNICO sitio que toca goalSelector / targetSelector de un mob de PokeCraft.
  *
- * Persistencia: dueño, bandera de aliado, modo y ataque directo viven en {@link Entity#getPersistentData()}
- * (NeoForge lo serializa con la entidad, y por eso también viaja dentro del NBT "CapturedEntity" de la Poké Ball).
- * Las metas NO se serializan, así que {@link #apply} se vuelve a llamar en EntityJoinLevelEvent (carga de chunk,
- * reinicio, dimensión, liberación desde la bola).
+ * Persistencia: dueño, bandera de aliado, modo, estado PVP/PVE y ataque directo viven en
+ * {@link Entity#getPersistentData()} (NeoForge lo serializa con la entidad, y por eso también viaja dentro del NBT
+ * "CapturedEntity" de la Poké Ball). Las metas NO se serializan, así que {@link #apply} se vuelve a llamar en
+ * EntityJoinLevelEvent (carga de chunk, reinicio, dimensión, liberación desde la bola).
  *
  * Ataque directo: es una SUPERPOSICIÓN sobre el modo, no un modo nuevo. El modo guardado (MobOrderState) no se toca,
  * así que al terminar el ataque basta con volver a llamar a {@link #apply} para regresar exactamente al modo previo.
+ *
+ * Estado PVP/PVE: es INDEPENDIENTE del modo. Por defecto un mob es PVE: no ataca a jugadores ni a aliados de otros
+ * jugadores. Todas las reglas de objetivo pasan por {@link #isAllowedTarget} / {@link #isTargetAllowed}, así que los
+ * goals (ProtectTargetGoal, AttackTargetGoal, TargetGuardGoal...) las heredan sin cambios.
  */
 public final class MobOrderManager {
     public static final String KEY_FRIENDLY = "PokeCraftFriendly";
     public static final String KEY_OWNER = "OwnerUUID";
     public static final String KEY_ORDER = "MobOrderState";
+    /** Estado PVP (true) / PVE (false, por defecto). Independiente del modo de orden. */
+    public static final String KEY_PVP = "PokeCraftPvp";
     /** Última vez (gameTime) que el mob tuvo un objetivo de ataque válido. */
     public static final String KEY_LAST_COMBAT = "PokeCraftLastCombat";
     /** UUID de la entidad marcada con el palo (ataque directo activo) y su nombre para los mensajes. */
@@ -52,28 +58,28 @@ public final class MobOrderManager {
     public static final String KEY_VENGEANCE = "PokeCraftVengeance";
     /** Clave con la que NeoForge guarda {@link Entity#getPersistentData()} dentro del NBT de una entidad guardada. */
     public static final String ENTITY_PERSISTENT_TAG = "NeoForgeData";
- 
+
     /** Distancias de seguimiento (bloques). */
     private static final float FOLLOW_START = 6.0F;
     private static final float FOLLOW_STOP = 2.5F;
     private static final float FOLLOW_TELEPORT = 24.0F;
     private static final double FOLLOW_SPEED = 1.2D;
- 
-    /** En modo ATTACK, ¿puede atacar a jugadores que no sean el dueño? Por defecto no. */
+
+    /** En modo ATTACK, ¿puede atacar SIEMPRE a jugadores que no sean el dueño? Por defecto no (solo si el mob está en PVP). */
     private static final boolean ATTACK_OTHER_PLAYERS = false;
- 
+
     /**
      * Mobs cuyo modo hay que reaplicar al final del tick. Las metas no pueden reinstalarse desde dentro de su propio
      * tick (se modificaría el conjunto de metas mientras el GoalSelector lo recorre).
      */
     private static final List<Mob> PENDING_REFRESH = new ArrayList<>();
- 
+
     private MobOrderManager() {}
- 
+
     // ---------------------------------------------------------------------------------------------
     // Datos persistentes
     // ---------------------------------------------------------------------------------------------
- 
+
     public static boolean isFriendly(Entity entity) {
         return entity.getPersistentData().getBoolean(KEY_FRIENDLY);
     }
@@ -82,20 +88,20 @@ public final class MobOrderManager {
     public static boolean isVengeance(Entity entity) {
         return entity.getPersistentData().getBoolean(KEY_VENGEANCE);
     }
- 
+
     @Nullable
     public static UUID getOwnerId(Entity entity) {
         CompoundTag data = entity.getPersistentData();
         return data.hasUUID(KEY_OWNER) ? data.getUUID(KEY_OWNER) : null;
     }
- 
+
     /** El dueño, solo si está conectado y en la misma dimensión. */
     @Nullable
     public static Player getOwner(Mob mob) {
         UUID id = getOwnerId(mob);
         return id == null ? null : mob.level().getPlayerByUUID(id);
     }
- 
+
     public static MobOrder getOrder(Entity entity) {
         return MobOrder.byId(entity.getPersistentData().getInt(KEY_ORDER));
     }
@@ -109,9 +115,10 @@ public final class MobOrderManager {
         if (!entityTag.contains(ENTITY_PERSISTENT_TAG, Tag.TAG_COMPOUND)) return MobOrder.FOLLOW;
         return MobOrder.byId(entityTag.getCompound(ENTITY_PERSISTENT_TAG).getInt(KEY_ORDER));
     }
- 
+
     /**
      * Guarda el modo y lo aplica de inmediato. Cambiar el modo a mano termina cualquier ataque directo en curso.
+     * No toca el estado PVP/PVE.
      */
     public static void setOrder(Mob mob, MobOrder order) {
         // Venganza: ignora cualquier orden (individual o global).
@@ -120,7 +127,7 @@ public final class MobOrderManager {
         mob.getPersistentData().putInt(KEY_ORDER, order.ordinal());
         apply(mob, order);
     }
- 
+
     /** Pasa al siguiente modo del ciclo, lo aplica y lo devuelve. */
     public static MobOrder cycleOrder(Mob mob) {
         if (isVengeance(mob)) return getOrder(mob);
@@ -128,21 +135,82 @@ public final class MobOrderManager {
         setOrder(mob, next);
         return next;
     }
- 
+
+    // ---------------------------------------------------------------------------------------------
+    // Estado PVP / PVE (independiente del modo)
+    // ---------------------------------------------------------------------------------------------
+
+    /** ¿Está el mob en PVP? false = PVE (valor por defecto, también para mobs sin el dato guardado). */
+    public static boolean isPvp(Entity entity) {
+        return entity.getPersistentData().getBoolean(KEY_PVP);
+    }
+
+    /**
+     * Estado PVP/PVE guardado dentro del NBT de una entidad capturada. Igual que el modo, viaja en "NeoForgeData"
+     * y por eso sobrevive a bolas, tarros, inventarios y reinicios. Sin dato = PVE.
+     */
+    public static boolean isPvpFromSavedEntity(CompoundTag entityTag) {
+        if (!entityTag.contains(ENTITY_PERSISTENT_TAG, Tag.TAG_COMPOUND)) return false;
+        return entityTag.getCompound(ENTITY_PERSISTENT_TAG).getBoolean(KEY_PVP);
+    }
+
+    /**
+     * Fija el estado PVP/PVE. No cambia el modo. Al pasar a PVE se suelta de inmediato cualquier objetivo que el
+     * nuevo estado ya no permita (un jugador, un aliado de otro jugador, o la víctima del ataque directo si lo es).
+     */
+    public static void setPvp(Mob mob, boolean pvp) {
+        mob.getPersistentData().putBoolean(KEY_PVP, pvp);
+        if (pvp || mob.level().isClientSide) return;
+
+        // Ataque directo contra un objetivo protegido: se cancela y se reinstala el modo guardado.
+        UUID directId = getDirectTargetId(mob);
+        if (directId != null && mob.level() instanceof ServerLevel level
+                && level.getEntity(directId) instanceof LivingEntity victim && isPvpProtected(victim)) {
+            clearDirectTarget(mob);
+            apply(mob, getOrder(mob));
+            return;
+        }
+
+        LivingEntity target = mob.getTarget();
+        if (target != null && !isTargetAllowed(mob, target, getOrder(mob))) {
+            dropTarget(mob);
+        }
+    }
+
+    /** Alterna PVP/PVE y devuelve el estado nuevo (true = PVP). */
+    public static boolean togglePvp(Mob mob) {
+        boolean next = !isPvp(mob);
+        setPvp(mob, next);
+        return next;
+    }
+
+    /**
+     * Objetivos que un mob en PVE nunca ataca ni daña: jugadores y aliados capturados de cualquier dueño. Un mob en
+     * Modo Venganza se rebeló contra su dueño, así que deja de estar protegido.
+     */
+    public static boolean isPvpProtected(LivingEntity target) {
+        return target instanceof Player || (isFriendly(target) && !isVengeance(target));
+    }
+
+    /** Regla PVP/PVE pura: en PVP todo vale; en PVE no se puede apuntar a objetivos protegidos. */
+    public static boolean pvpRuleAllows(Mob mob, LivingEntity target) {
+        return isPvp(mob) || !isPvpProtected(target);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Ataque directo
     // ---------------------------------------------------------------------------------------------
- 
+
     @Nullable
     public static UUID getDirectTargetId(Entity entity) {
         CompoundTag data = entity.getPersistentData();
         return data.hasUUID(KEY_DIRECT_TARGET) ? data.getUUID(KEY_DIRECT_TARGET) : null;
     }
- 
+
     public static String getDirectTargetName(Entity entity) {
         return entity.getPersistentData().getString(KEY_DIRECT_NAME);
     }
- 
+
     /** Marca a la víctima y reinstala la IA del mob con la superposición de ataque directo. */
     public static void setDirectTarget(Mob mob, LivingEntity victim) {
         if (isVengeance(mob)) return; // su único objetivo es el dueño
@@ -151,14 +219,14 @@ public final class MobOrderManager {
         data.putString(KEY_DIRECT_NAME, victim.getName().getString());
         apply(mob, getOrder(mob));
     }
- 
+
     /** Solo borra los datos; quien llama decide cuándo reinstalar la IA. */
     public static void clearDirectTarget(Mob mob) {
         CompoundTag data = mob.getPersistentData();
         data.remove(KEY_DIRECT_TARGET);
         data.remove(KEY_DIRECT_NAME);
     }
- 
+
     /** La víctima si sigue viva, cargada y en la misma dimensión; si no, null. */
     @Nullable
     public static LivingEntity resolveDirectTarget(Mob mob) {
@@ -167,7 +235,7 @@ public final class MobOrderManager {
         Entity found = level.getEntity(id);
         return found instanceof LivingEntity living && living.isAlive() && !living.isRemoved() ? living : null;
     }
- 
+
     /**
      * La víctima murió, desapareció o se descargó: termina el ataque directo. Se llama desde dentro de las metas, así
      * que la reinstalación de la IA (vuelta al modo previo) se aplaza al final del tick.
@@ -176,7 +244,7 @@ public final class MobOrderManager {
         clearDirectTarget(mob);
         PENDING_REFRESH.add(mob);
     }
- 
+
     /** Se llama en ServerTickEvent.Post. */
     public static void flushPendingRefresh() {
         if (PENDING_REFRESH.isEmpty()) return;
@@ -188,23 +256,23 @@ public final class MobOrderManager {
             }
         }
     }
- 
+
     // ---------------------------------------------------------------------------------------------
     // Combate (para decidir cuándo se puede teletransportar)
     // ---------------------------------------------------------------------------------------------
- 
+
     /** Lo llama TargetGuardGoal cada tick mientras el mob tiene un objetivo válido. */
     public static void markCombat(Mob mob) {
         mob.getPersistentData().putLong(KEY_LAST_COMBAT, mob.level().getGameTime());
     }
- 
+
     /**
      * Ticks desde el último combate: el menor entre (a) la última vez que tuvo objetivo, (b) la última vez que
      * recibió daño de una entidad y (c) la última vez que hirió a una entidad.
      */
     public static long ticksSinceCombat(Mob mob) {
         long result = Long.MAX_VALUE;
- 
+
         CompoundTag data = mob.getPersistentData();
         if (data.contains(KEY_LAST_COMBAT)) {
             result = Math.min(result, mob.level().getGameTime() - data.getLong(KEY_LAST_COMBAT));
@@ -217,11 +285,11 @@ public final class MobOrderManager {
         }
         return result;
     }
- 
+
     // ---------------------------------------------------------------------------------------------
     // Reglas de objetivos
     // ---------------------------------------------------------------------------------------------
- 
+
     /** Aliado del dueño: él mismo, mobs de PokeCraft con ese dueño o mascotas vanilla de ese dueño. */
     public static boolean isAlly(@Nullable UUID ownerId, Entity entity) {
         if (ownerId == null) return false;
@@ -230,60 +298,64 @@ public final class MobOrderManager {
         // Un mob en Venganza se rebeló contra su dueño: deja de ser aliado (puede ser objetivo y recibir daño).
         return isFriendly(entity) && !isVengeance(entity) && ownerId.equals(getOwnerId(entity));
     }
- 
+
+    /** Objetivo válido en general: ni él mismo, ni un aliado del dueño y, en PVE, ni jugadores ni aliados ajenos. */
     public static boolean isAllowedTarget(Mob mob, LivingEntity target) {
         if (target == mob || !target.isAlive()) return false;
-        return !isAlly(getOwnerId(mob), target);
+        if (isAlly(getOwnerId(mob), target)) return false;
+        return pvpRuleAllows(mob, target);
     }
- 
+
     public static boolean isTargetAllowed(Mob mob, LivingEntity target, MobOrder order) {
-        // Venganza: el dueño es el ÚNICO objetivo válido, sea cual sea el modo guardado.
+        // Venganza: el dueño es el ÚNICO objetivo válido, sea cual sea el modo guardado (ignora PVP/PVE).
         if (isVengeance(mob)) {
             return target.getUUID().equals(getOwnerId(mob));
         }
         // La víctima marcada con el palo siempre es válida, sea cual sea el modo (excepto Quieto, que ignora la orden).
+        // Un mob en PVE tampoco persigue a jugadores ni a aliados ajenos aunque estén marcados.
         UUID direct = getDirectTargetId(mob);
         if (direct != null && direct.equals(target.getUUID())) {
-            return order != MobOrder.STAY && !isAlly(getOwnerId(mob), target);
+            return order != MobOrder.STAY && !isAlly(getOwnerId(mob), target) && pvpRuleAllows(mob, target);
         }
         return order.allowsTargeting() && isAllowedTarget(mob, target);
     }
- 
+
     private static boolean isAttackModeTarget(Mob mob, LivingEntity target) {
         if (!isAllowedTarget(mob, target)) return false;
         if (target instanceof ArmorStand) return false;
-        return ATTACK_OTHER_PLAYERS || !(target instanceof Player);
+        // Jugadores: solo si el mob está en PVP (o si el interruptor global está activo).
+        return ATTACK_OTHER_PLAYERS || isPvp(mob) || !(target instanceof Player);
     }
- 
+
     // ---------------------------------------------------------------------------------------------
     // Aplicación de un modo (el método centralizado de limpieza y reasignación)
     // ---------------------------------------------------------------------------------------------
- 
+
     public static void apply(Mob mob, MobOrder order) {
         if (mob.level().isClientSide) return;
- 
+
         // 0. Guardar (una sola vez) las metas de objetivo nativas, para poder restaurarlas en el modo FREE.
         NativeTargetStashGoal stash = ensureNativeStash(mob);
- 
+
         // 1. Parar lo que esté ejecutándose (libera las banderas MOVE/LOOK/TARGET y deja de perseguir).
         stopRunningGoals(mob.goalSelector);
         stopRunningGoals(mob.targetSelector);
- 
+
         // 2. Quitar SOLO nuestras metas del goalSelector (la IA nativa de movimiento y combate se conserva)
         //    y VACIAR el targetSelector. Así se neutraliza la IA de selección de blancos original
         //    (zombie contra aldeanos, HurtByTarget, ira de neutrales...). Cada modo pone la suya.
         mob.goalSelector.getAvailableGoals().removeIf(w -> w.getGoal() instanceof ManagedGoal);
         mob.targetSelector.getAvailableGoals().clear();
- 
+
         // 3. Borrar el estado de IA arrastrado del modo anterior.
         dropTarget(mob);
         mob.setLastHurtByMob(null);
         mob.getNavigation().stop();
         clearBrainWalkTarget(mob);
- 
+
         // 4. Instalar las metas.
         mob.goalSelector.addGoal(0, new TargetGuardGoal(mob, order));
- 
+
         // 4-venganza. Modo Venganza: sustituye a cualquier modo y al ataque directo. Reutiliza las MISMAS metas de
         //     aproximación y de objetivo del ataque directo, pero con el dueño como único objetivo. Al no instalarse
         //     FollowOwnerMobGoal no hay teletransporte: se avanza con la navegación normal hasta que la IA nativa
@@ -301,7 +373,7 @@ public final class MobOrderManager {
             mob.targetSelector.addGoal(0, new DirectTargetGoal(mob));
             return;
         }
- 
+
         // 4b. Metas del modo.
         switch (order) {
             case STAY -> mob.goalSelector.addGoal(0, new StayPutGoal(mob));
@@ -314,15 +386,15 @@ public final class MobOrderManager {
             case ATTACK -> mob.targetSelector.addGoal(2,
                     new AttackTargetGoal(mob, target -> isAttackModeTarget(mob, target)));
             // FREE: sin metas de movimiento y con la IA de objetivos original. El TargetGuardGoal (y el
-            // LivingChangeTargetEvent) impiden que elija al dueño o a sus aliados.
+            // LivingChangeTargetEvent) impiden que elija al dueño, a sus aliados y, en PVE, a jugadores y aliados ajenos.
             case FREE -> mob.targetSelector.getAvailableGoals().addAll(stash.getStashed());
         }
     }
- 
+
     private static FollowOwnerMobGoal followGoal(Mob mob) {
         return new FollowOwnerMobGoal(mob, FOLLOW_SPEED, FOLLOW_START, FOLLOW_STOP, FOLLOW_TELEPORT);
     }
- 
+
     /**
      * Devuelve el guardián de metas nativas del mob; si no existe (primer apply tras crearse/cargarse el mob),
      * lo crea con las metas de objetivo que tiene ahora mismo, que todavía son las originales.
@@ -340,7 +412,7 @@ public final class MobOrderManager {
         mob.goalSelector.addGoal(Integer.MAX_VALUE, stash);
         return stash;
     }
- 
+
     /**
      * WrappedGoal.stop() deja running = false; el GoalSelector libera las banderas bloqueadas de goals
      * parados en su siguiente tick, por eso hay que parar ANTES de eliminar.
@@ -351,11 +423,11 @@ public final class MobOrderManager {
                 .toList()
                 .forEach(WrappedGoal::stop);
     }
- 
+
     // ---------------------------------------------------------------------------------------------
     // Utilidades de IA
     // ---------------------------------------------------------------------------------------------
- 
+
     public static void dropTarget(Mob mob) {
         mob.setTarget(null);
         if (mob instanceof NeutralMob neutral) {
@@ -363,14 +435,14 @@ public final class MobOrderManager {
         }
         mob.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
     }
- 
+
     public static void haltMovement(Mob mob) {
         mob.getNavigation().stop();
         mob.setZza(0.0F);
         mob.setXxa(0.0F);
         clearBrainWalkTarget(mob);
     }
- 
+
     /** Mobs con Brain (aldeano, piglin, warden, cabra...) guardan su destino en memorias, no en goals. */
     private static void clearBrainWalkTarget(Mob mob) {
         mob.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
