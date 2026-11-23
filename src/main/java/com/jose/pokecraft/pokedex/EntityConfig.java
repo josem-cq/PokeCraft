@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
  
 /**
  * Qué tipos de entidad están "activos": se pueden capturar, meter en frascos, aparecen en la PokéDex y cuentan en sus
@@ -34,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Se guarda en config/pokecraft-entities.json (id -> true/false). Los operadores lo editan en vivo desde la PokéDex
  *   de creativo; los cambios se aplican al momento y se escriben al archivo con el botón "Guardar".
  * - El servidor es la autoridad; los clientes reciben una copia (EntityConfigSyncPayload) para filtrar su PokéDex.
+ * - {@link #version()} sube con cada cambio de la lista de activos: el clasificador de fortaleza
+ *   ({@link MobStrengthManager}) y el catálogo de cliente la usan para saber cuándo recalcular.
  */
 public final class EntityConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -42,8 +45,16 @@ public final class EntityConfig {
  
     /** Solo valores explícitos (leídos del archivo o editados); lo que falte usa el valor por defecto. */
     private static final Map<ResourceLocation, Boolean> VALUES = new ConcurrentHashMap<>();
+
+    /** Contador de cambios: se incrementa cada vez que puede cambiar qué entidades están activas. */
+    private static final AtomicInteger VERSION = new AtomicInteger();
  
     private EntityConfig() {}
+
+    /** Versión actual de la configuración (solo sirve para comparar por igualdad con una lectura anterior). */
+    public static int version() {
+        return VERSION.get();
+    }
  
     public static Path file() {
         return FMLPaths.CONFIGDIR.get().resolve("pokecraft-entities.json");
@@ -65,15 +76,18 @@ public final class EntityConfig {
  
     public static void set(ResourceLocation id, boolean value) {
         VALUES.put(id, value);
+        VERSION.incrementAndGet();
     }
  
     public static void replaceAll(Map<ResourceLocation, Boolean> values) {
         VALUES.clear();
         VALUES.putAll(values);
+        VERSION.incrementAndGet();
     }
  
     public static void clear() {
         VALUES.clear();
+        VERSION.incrementAndGet();
     }
  
     public static Map<ResourceLocation, Boolean> snapshot() {
@@ -82,27 +96,32 @@ public final class EntityConfig {
  
     /** Lee el archivo (servidor). Si no existe lo crea con los valores por defecto. */
     public static void load() {
-        VALUES.clear();
-        Path file = file();
-        if (!Files.exists(file)) {
-            save();
-            return;
-        }
-        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            JsonElement root = JsonParser.parseReader(reader);
-            if (root.isJsonObject()) {
-                for (Map.Entry<String, JsonElement> entry : root.getAsJsonObject().entrySet()) {
-                    ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
-                    if (id == null) continue;
-                    try {
-                        VALUES.put(id, entry.getValue().getAsBoolean());
-                    } catch (RuntimeException ignored) {
-                        // valor que no es true/false: se ignora y esa entidad usa su valor por defecto
+        try {
+            VALUES.clear();
+            Path file = file();
+            if (!Files.exists(file)) {
+                save();
+                return;
+            }
+            try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                JsonElement root = JsonParser.parseReader(reader);
+                if (root.isJsonObject()) {
+                    for (Map.Entry<String, JsonElement> entry : root.getAsJsonObject().entrySet()) {
+                        ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
+                        if (id == null) continue;
+                        try {
+                            VALUES.put(id, entry.getValue().getAsBoolean());
+                        } catch (RuntimeException ignored) {
+                            // valor que no es true/false: se ignora y esa entidad usa su valor por defecto
+                        }
                     }
                 }
+            } catch (IOException | RuntimeException e) {
+                LOGGER.error("No se pudo leer {}: se usan los valores por defecto", file, e);
             }
-        } catch (IOException | RuntimeException e) {
-            LOGGER.error("No se pudo leer {}: se usan los valores por defecto", file, e);
+        } finally {
+            // Se incrementa al FINAL (con los valores ya cargados) para que nadie cachee un estado a medias.
+            VERSION.incrementAndGet();
         }
     }
  

@@ -1,25 +1,18 @@
 package com.jose.pokecraft.client.pokedex;
  
-import com.jose.pokecraft.pokedex.MobKind;
+import com.jose.pokecraft.pokedex.EntityConfig;
+import com.jose.pokecraft.pokedex.MobStrength;
+import com.jose.pokecraft.pokedex.MobStrengthManager;
+import com.jose.pokecraft.pokedex.StrengthClassifier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.MobCategory;
-import net.minecraft.world.entity.NeutralMob;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
-import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
-import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
@@ -45,6 +38,9 @@ import java.util.Map;
  * Qué entidades se MUESTRAN (activas) lo decide cada pantalla con EntityConfig; aquí entran todas salvo el jugador,
  * porque la PokéDex de creativo de un operador debe poder verlas y activarlas.
  *
+ * Fortaleza: las estadísticas base y la categoría de cada entrada vienen de {@link MobStrengthManager}. La categoría
+ * se reasigna automáticamente (sin reconstruir el catálogo) cada vez que cambia {@link EntityConfig#version()}.
+ *
  * Cada entrada se agrupa por la pestaña del inventario creativo donde está su huevo de aparición (p. ej. "Huevos de
  * aparición" en vanilla). Las que no tienen huevo se agrupan con las demás del mismo mod.
  */
@@ -64,6 +60,8 @@ public final class MobCatalog {
     private static List<TabInfo> tabs = List.of();
     private static boolean built = false;
     private static String builtForLanguage = "";
+    /** Versión de EntityConfig con la que se asignaron las categorías actuales (-1 = pendiente de clasificar). */
+    private static int classifiedVersion = -1;
     private static final Map<String, String> MOD_NAMES = new HashMap<>();
  
     private MobCatalog() {}
@@ -86,13 +84,16 @@ public final class MobCatalog {
             builtForLanguage = language;
             built = true;
         }
+        reclassify(); // barato: solo trabaja si cambió la configuración de entidades activas
     }
  
     public static void invalidate() {
         built = false;
         entries = List.of();
         tabs = List.of();
+        classifiedVersion = -1;
         MOD_NAMES.clear();
+        MobStrengthManager.invalidate();
     }
  
     /** Nombre legible del mod dueño de un namespace ("minecraft" -> "Minecraft"). */
@@ -103,9 +104,34 @@ public final class MobCatalog {
     }
  
     // ---------------------------------------------------------------------------------------------
+    // Fortaleza
+    // ---------------------------------------------------------------------------------------------
+ 
+    /**
+     * Reasigna la categoría de fortaleza de todas las entradas si la lista de entidades activas cambió desde la
+     * última vez. Los puntajes no cambian (son base); solo cambian los umbrales y, con ellos, la categoría.
+     */
+    private static void reclassify() {
+        int version = EntityConfig.version();
+        if (version == classifiedVersion || entries.isEmpty()) return;
+ 
+        Level level = Minecraft.getInstance().level;
+        if (level == null) return; // sin mundo no se pueden instanciar mobs; se reintenta en la próxima consulta
+ 
+        StrengthClassifier.Snapshot snapshot = MobStrengthManager.snapshot(level);
+        List<MobEntry> updated = new ArrayList<>(entries.size());
+        for (MobEntry entry : entries) {
+            updated.add(entry.withStrength(snapshot.tierOf(entry.strengthScore(), entry.forcedLowestStrength())));
+        }
+        entries = updated;
+        classifiedVersion = version;
+    }
+ 
+    // ---------------------------------------------------------------------------------------------
  
     private static void build() {
         Level level = Minecraft.getInstance().level;
+        classifiedVersion = -1; // las entradas nuevas llevan una categoría provisional hasta reclassify()
  
         // 1) Qué pestaña de creativo contiene el huevo de cada tipo.
         Map<Item, String> eggTab = new HashMap<>();
@@ -202,38 +228,20 @@ public final class MobCatalog {
         }
     }
  
-    @SuppressWarnings("unchecked")
     @Nullable
     private static MobEntry describe(EntityType<?> type, ResourceLocation id, @Nullable Level level) {
         if (type == EntityType.PLAYER) return null;
  
-        // Se instancia (sin añadirla al mundo) solo para saber de qué clase es: NeutralMob, Enemy...
-        // Solo los tipos con atributos (seres vivos) se instancian; el resto se clasifica por su categoría.
-        boolean living = DefaultAttributes.hasSupplier(type);
-        Entity instance = null;
-        if (living && level != null) {
-            try {
-                instance = type.create(level);
-            } catch (Exception ignored) {
-                // se clasifica por categoría más abajo
-            }
-        }
- 
-        MobKind kind = classify(instance, type);
- 
-        float health = 0, armor = 0, damage = 0;
-        if (living) {
-            AttributeSupplier supplier = DefaultAttributes.getSupplier((EntityType<? extends LivingEntity>) type);
-            health = base(supplier, Attributes.MAX_HEALTH);
-            armor = base(supplier, Attributes.ARMOR);
-            damage = base(supplier, Attributes.ATTACK_DAMAGE);
-        }
+        // Tipo (neutral/hostil/pasivo), vida, armadura, ataque y puntaje BASE: una única fuente compartida con el servidor.
+        StrengthClassifier.BaseStats stats = MobStrengthManager.baseStats(type, level);
  
         Component name = type.getDescription();
         SpawnEggItem egg = SpawnEggItem.byId(type);
         ItemStack icon = egg != null ? new ItemStack(egg) : ItemStack.EMPTY;
  
-        return new MobEntry(id, id.getNamespace(), name, name.getString(), kind, health, armor, damage,
+        // La categoría es provisional (la más baja): reclassify() la fija con los umbrales de la población activa.
+        return new MobEntry(id, id.getNamespace(), name, name.getString(), stats.kind(),
+                stats.health(), stats.armor(), stats.damage(), stats.score(), MobStrength.VERY_WEAK,
                 icon, debugEgg(type, id), "");
     }
  
@@ -246,16 +254,5 @@ public final class MobCatalog {
         Component shown = I18n.exists(type.getDescriptionId()) ? type.getDescription() : Component.literal(id.toString());
         stack.set(DataComponents.ITEM_NAME, Component.translatable("pokecraft.debug.spawn", shown));
         return stack;
-    }
- 
-    /** Neutral > Hostil > Pasivo: el Enderman o el Piglin zombificado son Monster pero se comportan como neutrales. */
-    private static MobKind classify(@Nullable Entity instance, EntityType<?> type) {
-        if (instance instanceof NeutralMob) return MobKind.NEUTRAL;
-        if (instance instanceof Enemy || type.getCategory() == MobCategory.MONSTER) return MobKind.HOSTILE;
-        return MobKind.PASSIVE;
-    }
- 
-    private static float base(AttributeSupplier supplier, Holder<Attribute> attribute) {
-        return supplier.hasAttribute(attribute) ? (float) supplier.getBaseValue(attribute) : 0.0F;
     }
 }

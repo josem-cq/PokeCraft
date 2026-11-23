@@ -117,7 +117,8 @@ public class PokedexScreen extends Screen {
     /** Ítem que "sostiene" el cursor en la variante de creativo (se devuelve al inventario creativo al cerrar). */
     private ItemStack carried = ItemStack.EMPTY;
     private final ItemStack swordIcon = new ItemStack(Items.IRON_SWORD);
-    private final List<MobEntry> catalog;
+    /** Se vuelve a pedir a MobCatalog en onDataUpdated(): al cambiar EntityConfig cambian las categorías de fortaleza. */
+    private List<MobEntry> catalog;
     private final List<Tab> tabs = new ArrayList<>();
  
     private final Dropdown<MobKind> kindFilter;
@@ -390,6 +391,7 @@ public class PokedexScreen extends Screen {
  
     /** Llamado cuando llegan descubrimientos nuevos con la pantalla ya abierta. */
     public void onDataUpdated() {
+        catalog = MobCatalog.entries(); // incluye la reclasificación de fortaleza si cambió la configuración
         rebuildTabs();
         refresh(false);
     }
@@ -965,7 +967,8 @@ public class PokedexScreen extends Screen {
  
         if (canEdit()) renderToggle(g, entry, x + cellW - TOGGLE_SIZE - 4, y + 4);
  
-        Component name = unlocked ? entry.displayName() : censoredName(entry);
+        // El color de la categoría de fortaleza se muestra también con el mob bloqueado (ver censoredName).
+        Component name = unlocked ? entry.strength().colorize(entry.displayName()) : censoredName(entry);
         FormattedCharSequence line = Language.getInstance().getVisualOrder(font.substrByWidth(name, maxWidth));
         g.drawString(font, line, textX, y + 5, unlocked ? 0xFFFFFFFF : 0xFFAAAAAA, true);
  
@@ -1008,9 +1011,13 @@ public class PokedexScreen extends Screen {
         onDataUpdated();
     }
  
-    /** Nombre de un mob bloqueado: su nombre real escrito con la fuente de la mesa de encantamientos. */
+    /**
+     * Nombre de un mob bloqueado: su nombre real escrito con la fuente de la mesa de encantamientos, pintado con el
+     * color de su categoría de fortaleza (la categoría es visible aunque el mob no esté descubierto).
+     */
     private static Component censoredName(MobEntry entry) {
-        return Component.literal(entry.sortName()).withStyle(Style.EMPTY.withFont(ALT_FONT));
+        return Component.literal(entry.sortName())
+                .withStyle(Style.EMPTY.withFont(ALT_FONT).withColor(entry.strength().color()));
     }
  
     private void drawScaled(GuiGraphics g, Component text, int x, int y, int color) {
@@ -1086,13 +1093,17 @@ public class PokedexScreen extends Screen {
         if (!creative && discovery == null) {
             // Bloqueado: no se revela nada del mob.
             lines.add(Component.translatable("pokecraft.pokedex.locked").withStyle(ChatFormatting.GRAY));
+            // La categoría ya se ve en el color del nombre, así que mostrarla aquí no revela nada más.
+            lines.add(Component.translatable("pokecraft.pokedex.tooltip.strength", entry.strength().label()).withStyle(ChatFormatting.GRAY));
             lines.add(Component.translatable("pokecraft.pokedex.locked_hint").withStyle(ChatFormatting.DARK_GRAY));
             return lines;
         }
  
-        lines.add(entry.displayName().copy().withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
+        lines.add(entry.strength().colorize(entry.displayName()).withStyle(ChatFormatting.BOLD));
         lines.add(Component.translatable("pokecraft.pokedex.tooltip.kind", entry.kind().label()).withStyle(ChatFormatting.GRAY));
         lines.add(Component.translatable("pokecraft.pokedex.tooltip.mod", MobCatalog.modName(entry.namespace())).withStyle(ChatFormatting.GRAY));
+        lines.add(Component.translatable("pokecraft.pokedex.tooltip.strength", entry.strength().label()).withStyle(ChatFormatting.GRAY));
+        lines.add(Component.translatable("pokecraft.pokedex.tooltip.strength_score", number((float) entry.strengthScore())).withStyle(ChatFormatting.GRAY));
         lines.add(Component.empty());
         lines.add(Component.translatable("pokecraft.pokedex.tooltip.health", number(entry.health()), number(entry.hearts()))
                 .withStyle(ChatFormatting.RED));

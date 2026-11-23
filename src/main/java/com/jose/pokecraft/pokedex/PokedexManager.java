@@ -22,6 +22,20 @@ public final class PokedexManager {
     public static PokedexData get(ServerPlayer player) {
         return player.getData(PokeCraftMod.POKEDEX);
     }
+
+    /**
+     * Categoría de fortaleza vigente de un tipo (calculada por {@link MobStrengthManager} sobre los mobs activos de
+     * EntityConfig). No se guarda en PokedexData a propósito: es un dato relativo y derivado que cambia al
+     * activar/desactivar entidades o al cambiar de mods, y persistirlo en el jugador lo dejaría desactualizado.
+     */
+    public static MobStrength strengthOf(EntityType<?> type, Level level) {
+        return MobStrengthManager.tierOf(type, level);
+    }
+
+    /** Puntaje de fortaleza base de un tipo (Vida * (1 + Armadura) * Ataque; ver {@link StrengthClassifier}). */
+    public static double strengthScoreOf(EntityType<?> type, Level level) {
+        return MobStrengthManager.scoreOf(type, level);
+    }
  
     /** Desbloquea el tipo de la entidad dada, registrando su posición y momento actuales. */
     public static boolean unlock(ServerPlayer player, Entity entity) {
@@ -44,8 +58,10 @@ public final class PokedexManager {
                 pos.getX(), pos.getY(), pos.getZ());
  
         if (!data.unlock(id, entry)) return false;
- 
-        player.displayClientMessage(Component.translatable("message.pokecraft.pokedex_registered", type.getDescription()), true);
+
+        // El nombre del mob registrado sale con el color de su categoría de fortaleza.
+        Component name = strengthOf(type, level).colorize(type.getDescription());
+        player.displayClientMessage(Component.translatable("message.pokecraft.pokedex_registered", name), true);
         return true;
     }
  
