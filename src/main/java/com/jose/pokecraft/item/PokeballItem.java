@@ -4,6 +4,7 @@ import com.jose.pokecraft.ai.MobOrderManager;
 import com.jose.pokecraft.entity.PokeballProjectileEntity;
 import com.jose.pokecraft.pokedex.CaptureRules;
 import com.jose.pokecraft.pokedex.PokedexManager;
+import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.component.DataComponents;
@@ -29,11 +30,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
  
 import java.util.List;
  
 public class PokeballItem extends Item {
     public enum Tier { POKEBALL, GREATBALL, SUPERBALL, ULTRABALL, MASTERBALL }
+ 
+    private static final Logger LOGGER = LogUtils.getLogger();
  
     private final Tier tier;
  
@@ -123,6 +128,12 @@ public class PokeballItem extends Item {
             return false;
         }
 
+        // No se captura un mob moribundo (las partes de un jefe multi-parte pueden seguir siendo golpeables
+        // mientras muere).
+        if (target.isDeadOrDying()) {
+            return false;
+        }
+
         // Modo Venganza: inmune a la captura con cualquier bola (incluida la Master Ball).
         if (MobOrderManager.isVengeance(target)) {
             player.displayClientMessage(Component.translatable("message.pokecraft.vengeance.no_capture", target.getDisplayName()), true);
@@ -190,17 +201,9 @@ public class PokeballItem extends Item {
         target.save(entityTag);
  
         entityTag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).toString());
-        entityTag.putString("PokeballRegistryName", BuiltInRegistries.ITEM.getKey(thrownStack.getItem()).toString());
- 
-        ItemStack filledStack = new ItemStack(thrownStack.getItem());
-        
-        CompoundTag tag = filledStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
-        tag.put("CapturedEntity", entityTag);
-        filledStack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
- 
-        if (target.hasCustomName()) {
-            filledStack.set(DataComponents.CUSTOM_NAME, target.getCustomName());
-        }
+        // La bola de origen (la que se lanzó) y el nombre del mob los graba CapturedBall.createFilled.
+        ItemStack filledStack = CapturedBall.createFilled(thrownStack.getItem(), entityTag,
+                target.hasCustomName() ? target.getCustomName() : null);
  
         ItemEntity itemEntity = new ItemEntity(target.level(), target.getX(), target.getY(), target.getZ(), filledStack);
         itemEntity.setPickUpDelay(20);
@@ -215,29 +218,47 @@ public class PokeballItem extends Item {
         return true;
     }
  
-    public static void releaseEntity(ServerLevel level, CompoundTag entityTag, BlockPos pos, Player player) {
-        Entity entity = EntityType.loadEntityRecursive(entityTag, level, e -> {
-            e.moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, level.getRandom().nextFloat() * 360.0F, 0.0F);
-            return e;
-        });
- 
-        if (entity instanceof LivingEntity living) {
-            CompoundTag persistent = living.getPersistentData();
-            persistent.putBoolean("PokeCraftFriendly", true);
-            persistent.putUUID("OwnerUUID", player.getUUID());
-            // El modo (seguir / quieto / proteger...) viaja dentro del NBT guardado ("NeoForgeData") a través de
-            // bolas, tarros, inventarios y reinicios: se conserva tal cual. Solo un mob sin modo guardado (salvaje
-            // recién capturado) sale con el de por defecto, "siguiendo". Se reescribe normalizado por si el valor
-            // guardado no fuese válido.
-            persistent.putInt(MobOrderManager.KEY_ORDER, MobOrderManager.getOrder(living).ordinal());
-            if (entityTag.contains("PokeballRegistryName")) {
-                persistent.putString("PokeballRegistryName", entityTag.getString("PokeballRegistryName"));
-            }
+    /**
+     * Libera el mob guardado. Devuelve false si no se pudo (sin dueño, tipo de entidad que ya no existe, NBT que un
+     * mod no logra cargar, UUID ya presente...): el llamador debe devolver la bola intacta, nunca destruirla con el
+     * mob dentro. No lanza excepciones: un mob de otro mod con datos inesperados no debe tumbar el servidor.
+     */
+    public static boolean releaseEntity(ServerLevel level, CompoundTag entityTag, BlockPos pos, @Nullable Player player) {
+        // Sin dueño (se desconectó con la bola en el aire) no hay a quién asignar el mob: antes era un NPE.
+        if (player == null) {
+            return false;
         }
  
-        if (entity != null) {
-            level.addFreshEntity(entity);
+        try {
+            Entity entity = EntityType.loadEntityRecursive(entityTag, level, e -> {
+                e.moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, level.getRandom().nextFloat() * 360.0F, 0.0F);
+                return e;
+            });
+            if (entity == null) {
+                return false;
+            }
+
+            if (entity instanceof LivingEntity living) {
+                CompoundTag persistent = living.getPersistentData();
+                persistent.putBoolean("PokeCraftFriendly", true);
+                persistent.putUUID("OwnerUUID", player.getUUID());
+                // El modo (seguir / quieto / proteger...) viaja dentro del NBT guardado ("NeoForgeData") a través de
+                // bolas, tarros, inventarios y reinicios: se conserva tal cual. Solo un mob sin modo guardado (salvaje
+                // recién capturado) sale con el de por defecto, "siguiendo". Se reescribe normalizado por si el valor
+                // guardado no fuese válido.
+                persistent.putInt(MobOrderManager.KEY_ORDER, MobOrderManager.getOrder(living).ordinal());
+                // La bola de origen viaja con el mob vivo en sus datos persistentes (ver CapturedBall).
+                CapturedBall.stamp(persistent, CapturedBall.resolve(entityTag));
+            }
+
+            if (!level.addFreshEntity(entity)) {
+                return false;
+            }
             level.playSound(null, pos, SoundEvents.ITEM_FRAME_ADD_ITEM, SoundSource.NEUTRAL, 1.0f, 1.0f);
+            return true;
+        } catch (RuntimeException ex) {
+            LOGGER.error("No se pudo liberar la entidad guardada '{}'", entityTag.getString("id"), ex);
+            return false;
         }
     }
 }

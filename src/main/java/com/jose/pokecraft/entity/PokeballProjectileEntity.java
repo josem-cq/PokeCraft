@@ -1,6 +1,7 @@
 package com.jose.pokecraft.entity;
 
 import com.jose.pokecraft.item.PokeballItem;
+import com.jose.pokecraft.pokedex.CaptureRules;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -17,6 +18,7 @@ import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
+import org.jetbrains.annotations.Nullable;
 
 public class PokeballProjectileEntity extends ThrowableItemProjectile {
     private final PokeballItem.Tier tier;
@@ -50,9 +52,15 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
 
         if (tag != null && tag.contains("CapturedEntity")) {
             CompoundTag entityTag = tag.getCompound("CapturedEntity");
-            PokeballItem.releaseEntity((ServerLevel) this.level(), entityTag, this.blockPosition(), player);
-            this.discard();
-        } else if (result.getEntity() instanceof LivingEntity target) {
+            releaseOrReturn(entityTag, this.blockPosition(), stack, player);
+        } else {
+            // Los mobs multi-parte (Ender Dragon, Ice Spider de Iron's Spells...) reciben el impacto en una parte
+            // (PartEntity), que no es un LivingEntity: antes aquí no pasaba nada y la bola atravesaba la hitbox.
+            LivingEntity target = CaptureRules.resolveTarget(result.getEntity());
+            if (target == null) {
+                return;
+            }
+
             // EVITAR ESTRICTAMENTE CAPTURAR JUGADORES
             if (target instanceof Player) {
                 handleEmptyBreakOrDrop(stack);
@@ -88,11 +96,24 @@ public class PokeballProjectileEntity extends ThrowableItemProjectile {
         if (tag != null && tag.contains("CapturedEntity")) {
             CompoundTag entityTag = tag.getCompound("CapturedEntity");
             BlockPos spawnPos = result.getBlockPos().relative(result.getDirection());
-            PokeballItem.releaseEntity((ServerLevel) this.level(), entityTag, spawnPos, player);
-            this.discard();
+            releaseOrReturn(entityTag, spawnPos, stack, player);
         } else {
             handleEmptyBreakOrDrop(stack);
         }
+    }
+
+    /**
+     * Libera el mob guardado. Si no se puede (el dueño se desconectó con la bola en el aire, tipo de entidad
+     * desconocido, NBT que un mod no logra cargar...) la bola llena cae al suelo intacta en lugar de destruirse con
+     * el mob dentro o tumbar el servidor.
+     */
+    private void releaseOrReturn(CompoundTag entityTag, BlockPos pos, ItemStack stack, @Nullable Player owner) {
+        boolean released = this.level() instanceof ServerLevel serverLevel
+                && PokeballItem.releaseEntity(serverLevel, entityTag, pos, owner);
+        if (!released) {
+            this.spawnAtLocation(stack);
+        }
+        this.discard();
     }
 
     private void handleEmptyBreakOrDrop(ItemStack stack) {

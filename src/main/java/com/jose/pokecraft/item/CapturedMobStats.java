@@ -260,17 +260,8 @@ public final class CapturedMobStats {
     }
  
     private static Component getBallName(CompoundTag entityTag) {
-        Component ballName = Component.literal("Poké Ball");
-        if (entityTag.contains("PokeballRegistryName", Tag.TAG_STRING)) {
-            ResourceLocation location = ResourceLocation.tryParse(entityTag.getString("PokeballRegistryName"));
-            if (location != null) {
-                Item ball = BuiltInRegistries.ITEM.getOptional(location).orElse(null);
-                if (ball != null) {
-                    ballName = ball.getDescription();
-                }
-            }
-        }
-        return ballName;
+        // Misma resolución que usan el tarro y la recogida (primer nivel -> NeoForgeData -> Poké Ball básica).
+        return CapturedBall.resolve(entityTag).getDescription();
     }
  
     /**

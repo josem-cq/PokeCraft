@@ -6,8 +6,9 @@ import com.jose.pokecraft.ai.MobOrder;
 import com.jose.pokecraft.ai.LookIndicatorManager;
 import com.jose.pokecraft.ai.MobOrderManager;
 import com.jose.pokecraft.ai.VengeanceManager;
+import com.jose.pokecraft.item.CapturedBall;
 import com.jose.pokecraft.item.PokeballItem;
-import net.minecraft.core.registries.BuiltInRegistries;
+import com.jose.pokecraft.pokedex.CaptureRules;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -21,7 +22,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -132,7 +132,9 @@ public class ModEventHandlers {
         ItemStack offHand = player.getOffhandItem();
         ItemStack heldItem = event.getItemStack();
  
-        if (event.getTarget() instanceof LivingEntity target) {
+        // Los mobs multi-parte (Ender Dragon, Ice Spider...) reciben el clic en una PartEntity: se sube al padre.
+        LivingEntity target = CaptureRules.resolveTarget(event.getTarget());
+        if (target != null) {
             CompoundTag persistent = target.getPersistentData();
  
             // Verificar que sea un aliado leal de este jugador
@@ -146,26 +148,15 @@ public class ModEventHandlers {
  
             // 1. RECUPERAR AL MOB: Solo si el jugador está agachado (Shift + Clic derecho)
             if (player.isShiftKeyDown()) {
-                Item pokeballItem = PokeCraftMod.POKEBALL.get();
-                if (persistent.contains("PokeballRegistryName")) {
-                    Item foundItem = BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(persistent.getString("PokeballRegistryName")));
-                    if (foundItem != null) {
-                        pokeballItem = foundItem;
-                    }
-                }
- 
-                ItemStack filledPokeball = new ItemStack(pokeballItem);
                 CompoundTag entityTag = new CompoundTag();
                 target.save(entityTag);
                 entityTag.remove("UUID");
  
-                CompoundTag tag = filledPokeball.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
-                tag.put("CapturedEntity", entityTag);
-                filledPokeball.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
- 
-                if (target.hasCustomName()) {
-                    filledPokeball.set(DataComponents.CUSTOM_NAME, target.getCustomName());
-                }
+                // La bola de origen viaja en los datos persistentes del mob ("NeoForgeData"), que target.save()
+                // ya incluye en el NBT. CapturedBall la lee de ahí y la graba también en la clave de primer nivel
+                // que usan el tarro y los tooltips (sin ella el tarro devolvía siempre una Poké Ball básica).
+                ItemStack filledPokeball = CapturedBall.createFilled(CapturedBall.resolve(entityTag), entityTag,
+                        target.hasCustomName() ? target.getCustomName() : null);
  
                 if (!player.addItem(filledPokeball)) {
                     player.drop(filledPokeball, false);
@@ -301,7 +292,8 @@ public class ModEventHandlers {
      */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onVengeanceInteract(PlayerInteractEvent.EntityInteract event) {
-        if (!(event.getTarget() instanceof Mob mob) || !MobOrderManager.isVengeance(mob)) return;
+        // Mismo criterio que en onEntityInteract: un mob multi-parte en Venganza también debe quedar bloqueado.
+        if (!(CaptureRules.resolveTarget(event.getTarget()) instanceof Mob mob) || !MobOrderManager.isVengeance(mob)) return;
         Player player = event.getEntity();
         boolean isOwner = player.getUUID().equals(MobOrderManager.getOwnerId(mob));
         boolean holdsStick = player.getMainHandItem().is(Items.STICK) || player.getOffhandItem().is(Items.STICK);
