@@ -1,5 +1,6 @@
 package com.jose.pokecraft.ai;
  
+import com.jose.pokecraft.pokedex.MobStrengthManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
@@ -189,14 +190,17 @@ public final class DirectAttackManager {
                         && ownerId.equals(MobOrderManager.getOwnerId(mob))));
     }
  
-    /** "A", "A y B", "A, B y C" (el "y" sale del idioma del jugador). */
+    /**
+     * "A", "A y B", "A, B y C" (el "y" sale del idioma del jugador). Cada nombre sale con el color de la categoría
+     * de fortaleza del mob aliado y respeta su nombre personalizado si fue renombrado.
+     */
     private static Component joinNames(List<Mob> mobs) {
         MutableComponent result = Component.empty();
         for (int i = 0; i < mobs.size(); i++) {
             if (i > 0) {
                 result.append(i == mobs.size() - 1 ? Component.translatable("message.pokecraft.list_and") : Component.literal(", "));
             }
-            result.append(mobs.get(i).getName());
+            result.append(MobStrengthManager.coloredName(mobs.get(i)));
         }
         return result;
     }

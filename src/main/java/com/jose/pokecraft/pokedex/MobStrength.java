@@ -38,9 +38,24 @@ public enum MobStrength {
         return Component.translatable("pokecraft.pokedex.strength." + key);
     }
 
-    /** Copia del componente dado pintada con el color de la categoría (no modifica el original). */
+    /**
+     * Copia del componente dado pintada con el color de la categoría (no modifica el original).
+     *
+     * El color se aplica a TODO el árbol (raíz y siblings), no solo a la raíz: así un nombre personalizado que ya
+     * traía colores propios también queda con el color de su categoría. Se conserva el texto, el resto de estilos
+     * (negrita, cursiva, hover...) y los componentes traducibles (se siguen traduciendo en el idioma del jugador).
+     */
     public MutableComponent colorize(Component name) {
-        return name.copy().withStyle(color);
+        return paint(name, color);
+    }
+
+    private static MutableComponent paint(Component source, ChatFormatting color) {
+        MutableComponent copy = MutableComponent.create(source.getContents())
+                .setStyle(source.getStyle().withColor(color));
+        for (Component sibling : source.getSiblings()) {
+            copy.append(paint(sibling, color));
+        }
+        return copy;
     }
 
     public static MobStrength byIndex(int index) {

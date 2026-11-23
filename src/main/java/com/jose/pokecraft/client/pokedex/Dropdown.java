@@ -3,7 +3,9 @@ package com.jose.pokecraft.client.pokedex;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
  
@@ -17,6 +19,9 @@ import java.util.Set;
  *  - Modo múltiple: cada fila es una casilla; conjunto vacío = "sin restricción".
  *  - Modo único: cada fila es una opción excluyente (como un selector de orden).
  * Cada cambio llama a {@code onChange} para que la pantalla refiltre en memoria al instante.
+ *
+ * Las etiquetas se dibujan como componentes (no como String plano), así que conservan su estilo: p. ej. las
+ * categorías de fortaleza aparecen con su color.
  *
  * No es un widget de Minecraft: la pantalla le reenvía clics y rueda, y le pide pintar el botón y, al final del
  * frame, la lista desplegada (para que quede por encima de todo lo demás).
@@ -148,7 +153,7 @@ public class Dropdown<T> {
         boolean hover = overButton(mouseX, mouseY) || open;
         PokedexUi.raised(g, x, y, w, h, hover ? PokedexUi.BUTTON_HOVER : PokedexUi.BUTTON_FILL);
  
-        String text = font.plainSubstrByWidth(buttonLabel().getString(), w - 16);
+        FormattedCharSequence text = Language.getInstance().getVisualOrder(font.substrByWidth(buttonLabel(), w - 16));
         g.drawString(font, text, x + 5, y + (h - 8) / 2, 0xFFFFFFFF, true);
         PokedexUi.arrowDown(g, x + w - 10, y + (h - 3) / 2, 0xFFFFFFFF);
     }
@@ -184,7 +189,8 @@ public class Dropdown<T> {
                 g.fill(bx + 2, by + 2, bx + 7, by + 7, 0xFF55FF55);
             }
  
-            String label = font.plainSubstrByWidth(option.label().getString(), pw - 22);
+            // El color del estilo de la etiqueta (si lo tiene) tiene prioridad sobre el blanco por defecto.
+            FormattedCharSequence label = Language.getInstance().getVisualOrder(font.substrByWidth(option.label(), pw - 22));
             g.drawString(font, label, px + 17, ry + 2, 0xFFFFFFFF, false);
         }
  

@@ -9,6 +9,7 @@ import com.jose.pokecraft.ai.VengeanceManager;
 import com.jose.pokecraft.item.CapturedBall;
 import com.jose.pokecraft.item.PokeballItem;
 import com.jose.pokecraft.pokedex.CaptureRules;
+import com.jose.pokecraft.pokedex.MobStrengthManager;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -195,7 +196,9 @@ public class ModEventHandlers {
                     // persistente y reinstala la IA del mob en el mismo tick.
                     MobOrder newOrder = MobOrderManager.cycleOrder(mob);
  
-                    Component mobName = target.hasCustomName() ? target.getCustomName() : target.getDisplayName();
+                    // Nombre con el color de su categoría de fortaleza (respeta el nombre personalizado si lo tiene).
+                    Component mobName = MobStrengthManager.coloredName(target,
+                            target.hasCustomName() ? target.getCustomName() : target.getDisplayName());
                     player.displayClientMessage(
                             Component.translatable("message.pokecraft.order_changed", mobName, newOrder.displayName()), true);
  

@@ -39,6 +39,7 @@
   "pokecraft.pokedex.kind.neutral": "Neutral",
   "pokecraft.pokedex.kind.hostile": "Hostil",
   "pokecraft.pokedex.filter.kind": "Tipo",
+  "pokecraft.pokedex.filter.category": "Categoría",
   "pokecraft.pokedex.filter.mod": "Mod",
   "pokecraft.pokedex.filter.state": "Estado",
   "pokecraft.pokedex.state.locked": "Bloqueado",

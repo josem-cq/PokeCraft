@@ -1,5 +1,6 @@
 package com.jose.pokecraft.ai;
 
+import com.jose.pokecraft.pokedex.MobStrengthManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
@@ -58,7 +59,9 @@ public final class LookIndicatorManager {
         Component mode = MobOrderManager.isVengeance(mob)
                 ? Component.translatable("pokecraft.order.vengeance")
                 : MobOrderManager.getOrder(mob).displayName();
-        player.displayClientMessage(Component.translatable("message.pokecraft.order_look", mob.getDisplayName(), mode), true);
+        // Nombre con el color de su categoría de fortaleza (respeta el nombre personalizado si lo tiene).
+        Component name = MobStrengthManager.coloredName(mob, mob.getDisplayName());
+        player.displayClientMessage(Component.translatable("message.pokecraft.order_look", name, mode), true);
     }
 
     /**

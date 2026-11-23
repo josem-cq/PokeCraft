@@ -4,6 +4,7 @@ import com.jose.pokecraft.network.EntityConfigEditPayload;
 import com.jose.pokecraft.network.EntityConfigSavePayload;
 import com.jose.pokecraft.pokedex.EntityConfig;
 import com.jose.pokecraft.pokedex.MobKind;
+import com.jose.pokecraft.pokedex.MobStrength;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -36,7 +37,7 @@ import java.util.TreeSet;
 /**
  * Pantalla de la PokéDex. Estructura:
  *  - Pestañas superiores: "Búsqueda" (todos los mods) + una por namespace, con flechas si no caben.
- *  - Buscador + orden (criterio y dirección) y filtros múltiples (Tipo, Mod solo en Búsqueda, Estado).
+ *  - Buscador + orden (criterio y dirección) y filtros múltiples (Tipo, Categoría, Mod solo en Búsqueda, Estado).
  *  - Cuadrícula con scroll: nombre (cifrado si está bloqueado) y estadísticas compactas debajo.
  *  - Tooltip completo al pasar el ratón sobre un mob desbloqueado.
  *
@@ -60,6 +61,9 @@ public class PokedexScreen extends Screen {
     private static final int PAD = 8;
     private static final int SCROLLBAR_W = 6;
     private static final float STATS_SCALE = 0.72F;
+    /** Ancho máximo de cada filtro de la segunda fila (se reduce si no caben todos) y separación entre ellos. */
+    private static final int FILTER_MAX_W = 78;
+    private static final int FILTER_GAP = 4;
     // Bloque de inventario del jugador (creativo): 3 filas + hotbar, como en el inventario vanilla.
     private static final int INV_W = 9 * 18 + 14;
     private static final int INV_H = 7 + 3 * 18 + 4 + 18 + 7;
@@ -122,6 +126,8 @@ public class PokedexScreen extends Screen {
     private final List<Tab> tabs = new ArrayList<>();
  
     private final Dropdown<MobKind> kindFilter;
+    /** Filtro por categoría de fortaleza (Muy Débil ... Muy Fuerte); sirve en Supervivencia y en Creativo. */
+    private final Dropdown<MobStrength> strengthFilter;
     private final Dropdown<String> modFilter;
     private final Dropdown<LockState> stateFilter;
     private final Dropdown<Boolean> enabledFilter;
@@ -188,6 +194,11 @@ public class PokedexScreen extends Screen {
         List<Dropdown.Option<MobKind>> kinds = new ArrayList<>();
         for (MobKind kind : MobKind.values()) kinds.add(new Dropdown.Option<>(kind, kind.plainLabel()));
         kindFilter = new Dropdown<>(Component.translatable("pokecraft.pokedex.filter.kind"), kinds, true, () -> refresh(true));
+ 
+        // Categorías de fortaleza, con su color en la lista (de la más débil a la más fuerte).
+        List<Dropdown.Option<MobStrength>> strengths = new ArrayList<>();
+        for (MobStrength strength : MobStrength.values()) strengths.add(new Dropdown.Option<>(strength, strength.label()));
+        strengthFilter = new Dropdown<>(Component.translatable("pokecraft.pokedex.filter.category"), strengths, true, () -> refresh(true));
  
         List<Dropdown.Option<String>> mods = new ArrayList<>();
         for (String ns : ordered) mods.add(new Dropdown.Option<>(ns, Component.literal(MobCatalog.modName(ns))));
@@ -343,26 +354,34 @@ public class PokedexScreen extends Screen {
         refresh(false);
     }
  
-    /** Coloca los filtros de la segunda fila; "Mod" solo existe en la pestaña de Búsqueda. */
+    /**
+     * Coloca los filtros de la segunda fila. Con hasta 4 filtros a la vez (Tipo, Categoría, Mod en Búsqueda y
+     * Estado/Activo) el ancho de cada uno se reparte para que quepan en el panel más estrecho.
+     */
     private void layoutFilters(int rowB) {
+        List<Dropdown<?>> filters = visibleFilters();
+        int available = panelW - 2 * PAD;
+        int fw = Math.min(FILTER_MAX_W, (available - FILTER_GAP * (filters.size() - 1)) / filters.size());
         int fx = panelX + PAD;
-        int fw = 78;
-        kindFilter.setBounds(fx, rowB, fw, 16);
-        fx += fw + 4;
-        if (tabs.get(activeTab).isSearch()) {
-            modFilter.setBounds(fx, rowB, fw, 16);
-            fx += fw + 4;
+        for (Dropdown<?> filter : filters) {
+            filter.setBounds(fx, rowB, fw, 16);
+            fx += fw + FILTER_GAP;
         }
-        if (!creative) stateFilter.setBounds(fx, rowB, fw, 16);
-        else if (canEdit()) enabledFilter.setBounds(fx, rowB, fw, 16);
     }
  
-    private List<Dropdown<?>> visibleDropdowns() {
+    /** Filtros visibles de la segunda fila, en el orden en que se dibujan. "Mod" solo existe en la pestaña de Búsqueda. */
+    private List<Dropdown<?>> visibleFilters() {
         List<Dropdown<?>> list = new ArrayList<>();
         list.add(kindFilter);
+        list.add(strengthFilter);
         if (tabs.get(activeTab).isSearch()) list.add(modFilter);
         if (!creative) list.add(stateFilter);
         else if (canEdit()) list.add(enabledFilter);
+        return list;
+    }
+ 
+    private List<Dropdown<?>> visibleDropdowns() {
+        List<Dropdown<?>> list = visibleFilters();
         list.add(sortDropdown);
         return list;
     }
@@ -442,6 +461,9 @@ public class PokedexScreen extends Screen {
                 if (!entry.sortName().toLowerCase(Locale.ROOT).contains(query)) continue;
             }
             if (!kindFilter.selected().isEmpty() && !kindFilter.selected().contains(entry.kind())) continue;
+            // La categoría ya es visible en el color del nombre aunque el mob esté bloqueado, así que filtrar por ella
+            // no revela nada nuevo (los bloqueados siguen mostrándose censurados).
+            if (!strengthFilter.selected().isEmpty() && !strengthFilter.selected().contains(entry.strength())) continue;
             if (tab.isSearch() && !modFilter.selected().isEmpty() && !modFilter.selected().contains(entry.namespace())) continue;
             if (canEdit() && !enabledFilter.selected().isEmpty()
                     && !enabledFilter.selected().contains(EntityConfig.isEnabled(entry.id()))) continue;

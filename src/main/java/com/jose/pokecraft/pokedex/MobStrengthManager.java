@@ -1,7 +1,10 @@
 package com.jose.pokecraft.pokedex;
 
 import com.mojang.logging.LogUtils;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -13,7 +16,6 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.level.Level;
-import net.minecraft.core.Holder;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
@@ -32,6 +34,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * No hace falta sincronizarla por red: solo depende del registro y de EntityConfig (que ya se sincroniza), así que
  * cliente y servidor obtienen el mismo resultado. En un mundo integrado comparten esta caché, lo cual es inocuo.
+ *
+ * Esta clase NO usa nada de net.minecraft.client.*: se puede llamar igual desde el servidor (mensajes del palo,
+ * PokéDex) que desde el cliente (tooltips, pantalla).
  */
 public final class MobStrengthManager {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -137,6 +142,23 @@ public final class MobStrengthManager {
 
     public static double scoreOf(EntityType<?> type, @Nullable Level level) {
         return baseStats(type, level).score();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Nombres coloreados (mensajes del palo, etc.)
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Nombre de la entidad (el personalizado si lo tiene, si no el de su especie) con el color de la categoría de
+     * fortaleza de su tipo. Seguro en servidor: el componente sigue siendo traducible en el cliente de cada jugador.
+     */
+    public static MutableComponent coloredName(Entity entity) {
+        return coloredName(entity, entity.getName());
+    }
+
+    /** Igual que {@link #coloredName(Entity)} pero coloreando un nombre ya elegido por quien llama (p. ej. getDisplayName). */
+    public static MutableComponent coloredName(Entity entity, Component name) {
+        return tierOf(entity.getType(), entity.level()).colorize(name);
     }
 
     /** Olvida todo (al salir del mundo: otro servidor puede tener otros mods). */

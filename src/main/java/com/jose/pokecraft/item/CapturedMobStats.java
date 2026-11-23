@@ -1,6 +1,7 @@
 package com.jose.pokecraft.item;
  
 import com.jose.pokecraft.ai.MobOrderManager;
+import com.jose.pokecraft.pokedex.MobStrengthManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
@@ -27,6 +28,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
  
 import java.util.ArrayList;
@@ -245,7 +247,30 @@ public final class CapturedMobStats {
         return BuiltInRegistries.ENTITY_TYPE.getOptional(location).orElse(null);
     }
  
+    /** Nombre SIN colorear de la categoría de fortaleza (compatibilidad); ver la sobrecarga con nivel. */
     public static Component getDisplayName(CompoundTag entityTag, @Nullable EntityType<?> type, @Nullable HolderLookup.Provider registries) {
+        return getDisplayName(entityTag, type, registries, null);
+    }
+
+    /**
+     * Nombre del mob guardado (el personalizado si lo tiene; si no, el de su especie) pintado con el color de su
+     * categoría de fortaleza. El color se aplica SIEMPRE, también a un nombre personalizado o renombrado en yunque:
+     * se conserva su texto y se sobrescribe su color. Sin nivel (o sin tipo) no se puede clasificar y se devuelve
+     * sin color antes que con uno incorrecto.
+     */
+    public static Component getDisplayName(CompoundTag entityTag, @Nullable EntityType<?> type,
+                                           @Nullable HolderLookup.Provider registries, @Nullable Level level) {
+        Component name = resolveName(entityTag, type, registries);
+        if (type == null || level == null) return name;
+        try {
+            return MobStrengthManager.tierOf(type, level).colorize(name);
+        } catch (RuntimeException e) {
+            // Un tooltip nunca debe crashear el cliente.
+            return name;
+        }
+    }
+
+    private static Component resolveName(CompoundTag entityTag, @Nullable EntityType<?> type, @Nullable HolderLookup.Provider registries) {
         if (entityTag.contains("CustomName", Tag.TAG_STRING)) {
             String raw = entityTag.getString("CustomName");
             if (registries != null) {
@@ -265,18 +290,19 @@ public final class CapturedMobStats {
     }
  
     /**
-     * Añade al tooltip: nombre, (opcionalmente) Poké Ball de origen, Salud, Armadura, Daño, efectos activos e ID técnico.
+     * Añade al tooltip: nombre (coloreado por categoría de fortaleza), (opcionalmente) Poké Ball de origen, Salud,
+     * Armadura, Daño, efectos activos e ID técnico.
      */
     public static void appendTooltip(List<Component> tooltip, CompoundTag entityTag, Item.TooltipContext context, boolean includeBall) {
         HolderLookup.Provider registries = context.registries();
         EntityType<?> type = getEntityType(entityTag);
  
-        tooltip.add(Component.literal("§aContiene: §f").append(getDisplayName(entityTag, type, registries)));
+        tooltip.add(Component.literal("§aContiene: §f").append(getDisplayName(entityTag, type, registries, context.level())));
         if (includeBall) {
             tooltip.add(Component.literal("§7Bola: §f").append(getBallName(entityTag)));
         }
 
-        // Modo con el que saldrá el mob al liberarse (siguiendo / quieto / protegiendo...), leído del propio NBT.
+        // Modo con el que saldrá el mob al liberarse (siguiendo / quieto / proteger...), leído del propio NBT.
         tooltip.add(Component.translatable("tooltip.pokecraft.mode",
                         MobOrderManager.getOrderFromSavedEntity(entityTag).displayName().copy().withStyle(ChatFormatting.WHITE))
                 .withStyle(ChatFormatting.GRAY));
