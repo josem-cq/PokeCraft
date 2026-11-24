@@ -19,6 +19,7 @@ import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.NeutralMob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -252,6 +253,10 @@ public class PokeballItem extends Item {
                 persistent.putBoolean(MobOrderManager.KEY_PVP, MobOrderManager.isPvpFromSavedEntity(entityTag));
                 // La bola de origen viaja con el mob vivo en sus datos persistentes (ver CapturedBall).
                 CapturedBall.stamp(persistent, CapturedBall.resolve(entityTag));
+            }
+            // Nunca despawnea ni cuenta para el mobcap: solo desaparece por captura (Shift + clic derecho) o muerte.
+            if (entity instanceof Mob mob) {
+                MobOrderManager.protectFromDespawn(mob);
             }
 
             if (!level.addFreshEntity(entity)) {

@@ -33,6 +33,7 @@ import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.MobDespawnEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
@@ -54,7 +55,21 @@ public class ModEventHandlers {
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
         if (event.getEntity() instanceof Mob mob && MobOrderManager.isFriendly(mob)) {
+            // También cubre aliados guardados antes de este cambio: al cargarse quedan protegidos.
+            MobOrderManager.protectFromDespawn(mob);
             MobOrderManager.apply(mob, MobOrderManager.getOrder(mob));
+        }
+    }
+
+    /**
+     * Red de seguridad: si algún mod o regla de despawn llegase a evaluar a un aliado capturado, se prohíbe.
+     * (La persistencia ya hace que vanilla ni lo evalúe; esto cubre lógica de otros mods.)
+     */
+    @SubscribeEvent
+    public static void onMobDespawn(MobDespawnEvent event) {
+        Mob mob = event.getEntity();
+        if (!mob.level().isClientSide && MobOrderManager.isFriendly(mob)) {
+            event.setResult(MobDespawnEvent.Result.DENY);
         }
     }
 

@@ -27,6 +27,8 @@
   "message.pokecraft.direct_attack.one": "%1$s atacará a %2$s",
   "message.pokecraft.direct_attack.many": "%1$s atacarán a %2$s",
   "message.pokecraft.direct_attack.pve_blocked": "Tus mobs en PVE no atacarán a %1$s",
+  "message.pokecraft.direct_attack.out_of_range": "Tus aliados están a más de %1$d bloques",
+  "message.pokecraft.direct_attack.none_available": "Ningún aliado puede atacar a %1$s ahora mismo",
   "message.pokecraft.direct_cancel.one": "%1$s ya no atacará a %2$s",
   "message.pokecraft.direct_cancel.many": "%1$s ya no atacarán a %2$s",
   "message.pokecraft.stay_all.one": "%1$s ahora está quieto",

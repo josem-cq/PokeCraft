@@ -21,6 +21,7 @@ import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.npc.WanderingTrader;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
@@ -330,6 +331,23 @@ public final class MobOrderManager {
     // ---------------------------------------------------------------------------------------------
     // Aplicación de un modo (el método centralizado de limpieza y reasignación)
     // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Un aliado capturado solo puede desaparecer por Shift + clic derecho (bola/frasco) o por muerte. Marca el mob
+     * como persistente: {@code Mob.checkDespawn} lo salta (ni distancia, ni inactividad) y {@code NaturalSpawner}
+     * deja de contarlo para el mobcap. Se llama al liberarlo y en cada carga del mob (chunk, reinicio, dimensión).
+     * La bandera se guarda sola en el NBT ("PersistenceRequired"). Idempotente y barato.
+     */
+    public static void protectFromDespawn(Mob mob) {
+        if (mob.level().isClientSide) return;
+        if (!mob.isPersistenceRequired()) {
+            mob.setPersistenceRequired();
+        }
+        // El mercader errante lleva su propio temporizador de desaparición, independiente de la persistencia.
+        if (mob instanceof WanderingTrader trader && trader.getDespawnDelay() > 0) {
+            trader.setDespawnDelay(0);
+        }
+    }
 
     public static void apply(Mob mob, MobOrder order) {
         if (mob.level().isClientSide) return;

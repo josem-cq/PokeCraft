@@ -126,14 +126,19 @@ public final class DirectAttackManager {
             return;
         }
 
+        List<Mob> inRange = findAlliesInRange(player);
         List<Mob> engaged = new ArrayList<>();
         int blockedByPve = 0;
-        for (Mob mob : findAlliesInRange(player)) {
+        int alreadyOnIt = 0;
+        for (Mob mob : inRange) {
             // El modo Quieto ignora la orden; los mobs sin ataque (vacas, ovejas...) tampoco participan.
             if (MobOrderManager.getOrder(mob) == MobOrder.STAY) continue;
             if (!mob.getAttributes().hasAttribute(Attributes.ATTACK_DAMAGE)) continue;
             // Si ya iban a por esta víctima (golpes repetidos con el palo) no se reinicia nada.
-            if (victim.getUUID().equals(MobOrderManager.getDirectTargetId(mob))) continue;
+            if (victim.getUUID().equals(MobOrderManager.getDirectTargetId(mob))) {
+                alreadyOnIt++;
+                continue;
+            }
             // PVE: no atacan a jugadores ni a aliados de otros jugadores.
             if (!MobOrderManager.pvpRuleAllows(mob, victim)) {
                 blockedByPve++;
@@ -151,6 +156,18 @@ public final class DirectAttackManager {
         } else if (blockedByPve > 0) {
             player.displayClientMessage(Component.translatable(
                     "message.pokecraft.direct_attack.pve_blocked", victim.getName()), true);
+        } else if (alreadyOnIt == 0) {
+            // Ningún aliado recibió la orden y tampoco era un golpe repetido: se explica el motivo en lugar de
+            // fallar en silencio (antes era imposible distinguir "fuera de radio" de "todos quietos").
+            if (inRange.isEmpty()) {
+                if (hasOwnedAlliesBeyondRange(player)) {
+                    player.displayClientMessage(Component.translatable(
+                            "message.pokecraft.direct_attack.out_of_range", (int) ORDER_RADIUS), true);
+                }
+            } else {
+                player.displayClientMessage(Component.translatable(
+                        "message.pokecraft.direct_attack.none_available", victim.getName()), true);
+            }
         }
     }
 
@@ -210,10 +227,20 @@ public final class DirectAttackManager {
         UUID ownerId = player.getUUID();
         return new ArrayList<>(level.getEntities(EntityTypeTest.forClass(Mob.class),
                 // Un mob en Modo Venganza ignora las órdenes globales (todos quietos, ataque directo y su cancelación).
-                mob -> mob.isAlive() && mob.level() == level
-                        && MobOrderManager.isFriendly(mob) && !MobOrderManager.isVengeance(mob)
-                        && ownerId.equals(MobOrderManager.getOwnerId(mob))
+                mob -> isOwnedAlly(mob, ownerId) && mob.level() == level
                         && mob.distanceToSqr(player) <= ORDER_RADIUS_SQR));
+    }
+
+    /** ¿Tiene el jugador aliados cargados en su dimensión pero fuera del radio de las órdenes? (solo para avisar). */
+    private static boolean hasOwnedAlliesBeyondRange(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        UUID ownerId = player.getUUID();
+        return !level.getEntities(EntityTypeTest.forClass(Mob.class), mob -> isOwnedAlly(mob, ownerId)).isEmpty();
+    }
+
+    private static boolean isOwnedAlly(Mob mob, UUID ownerId) {
+        return mob.isAlive() && MobOrderManager.isFriendly(mob) && !MobOrderManager.isVengeance(mob)
+                && ownerId.equals(MobOrderManager.getOwnerId(mob));
     }
 
     /**
