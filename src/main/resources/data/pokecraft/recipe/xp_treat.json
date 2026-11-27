@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["CCC", "CBC", "CCC"],
+  "key": {
+    "C": { "item": "minecraft:golden_carrot" },
+    "B": { "item": "minecraft:experience_bottle" }
+  },
+  "result": { "id": "pokecraft:xp_treat", "count": 1 }
+}

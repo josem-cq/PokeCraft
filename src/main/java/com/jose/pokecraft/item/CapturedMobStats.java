@@ -2,6 +2,9 @@ package com.jose.pokecraft.item;
 
 import com.jose.pokecraft.ai.MobOrderManager;
 import com.jose.pokecraft.ai.MobStatusDisplay;
+import com.jose.pokecraft.level.MobLevelData;
+import com.jose.pokecraft.level.MobLevelManager;
+import com.jose.pokecraft.level.MobSlot;
 import com.jose.pokecraft.pokedex.MobStrengthManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.Holder;
@@ -102,6 +105,11 @@ public final class CapturedMobStats {
             saved = entityTag.getList("Attributes", Tag.TAG_COMPOUND);
         }
         attributes.load(saved);
+
+        // 1b. Nivel del mob: bonificaciones de salud/daño/armadura (se quitan y se vuelven a poner, sin duplicarse
+        //     aunque el NBT ya traiga las permanentes guardadas) y sin tocar el NBT.
+        MobLevelData levelData = MobLevelData.read(MobLevelManager.persistentOf(entityTag), registries);
+        MobLevelManager.applyLevelBonuses(attributes, levelData.level, false);
 
         // 2. Equipamiento: sus modificadores de atributo (armadura, daño, salud, etc.) como en LivingEntity.
         List<Equipped> equipment = registries != null ? readEquipment(entityTag, registries) : List.of();
@@ -310,11 +318,27 @@ public final class CapturedMobStats {
                         MobStatusDisplay.pvpLabel(MobOrderManager.isPvpFromSavedEntity(entityTag)))
                 .withStyle(ChatFormatting.GRAY));
 
+        appendLevelLines(tooltip, entityTag, registries);
         appendStatLines(tooltip, compute(entityTag, registries));
         appendActiveEffects(tooltip, entityTag);
 
         if (entityTag.contains("id", Tag.TAG_STRING)) {
             tooltip.add(Component.literal("§7ID: " + entityTag.getString("id")));
+        }
+    }
+
+    /** Nivel (X / 100) y, si están desbloqueados y ocupados, la poción permanente y la bola de reserva. */
+    private static void appendLevelLines(List<Component> tooltip, CompoundTag entityTag, @Nullable HolderLookup.Provider registries) {
+        MobLevelData data = MobLevelData.read(MobLevelManager.persistentOf(entityTag), registries);
+        tooltip.add(Component.translatable("tooltip.pokecraft.level", data.level, MobLevelData.MAX_LEVEL)
+                .withStyle(ChatFormatting.GRAY));
+        if (data.isUnlocked(MobSlot.POTION) && !data.potion.isEmpty()) {
+            tooltip.add(Component.translatable("tooltip.pokecraft.potion", data.potion.getHoverName())
+                    .withStyle(ChatFormatting.GRAY));
+        }
+        if (data.isUnlocked(MobSlot.RESERVE_BALL) && !data.reserve.isEmpty()) {
+            tooltip.add(Component.translatable("tooltip.pokecraft.reserve", data.reserve.getHoverName())
+                    .withStyle(ChatFormatting.GRAY));
         }
     }
 

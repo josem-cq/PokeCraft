@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "pokecraft:block/training_table"
+    }
+  }
+}

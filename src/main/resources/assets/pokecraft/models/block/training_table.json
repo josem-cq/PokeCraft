@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "pokecraft:block/training_table_side",
+    "down": "pokecraft:block/training_table_bottom",
+    "up": "pokecraft:block/training_table_top",
+    "north": "pokecraft:block/training_table_side",
+    "south": "pokecraft:block/training_table_side",
+    "east": "pokecraft:block/training_table_side",
+    "west": "pokecraft:block/training_table_side"
+  }
+}

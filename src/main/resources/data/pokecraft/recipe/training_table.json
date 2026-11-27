@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": ["IDI", "PBP", "PPP"],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "D": { "item": "minecraft:diamond" },
+    "B": { "item": "pokecraft:pokeball" },
+    "P": { "tag": "minecraft:planks" }
+  },
+  "result": { "id": "pokecraft:training_table", "count": 1 }
+}

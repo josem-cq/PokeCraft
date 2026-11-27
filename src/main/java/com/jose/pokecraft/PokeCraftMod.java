@@ -5,6 +5,9 @@ import com.jose.pokecraft.pokedex.PokedexData;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -27,6 +30,7 @@ public class PokeCraftMod {
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(BuiltInRegistries.ITEM, MOD_ID);
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(BuiltInRegistries.BLOCK, MOD_ID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
+    public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MOD_ID);
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MOD_ID);
     public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES = DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, MOD_ID);
  
@@ -45,6 +49,9 @@ public class PokeCraftMod {
     public static final DeferredHolder<Item, Item> ULTRABALL = ITEMS.register("ultraball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(16), com.jose.pokecraft.item.PokeballItem.Tier.ULTRABALL));
     public static final DeferredHolder<Item, Item> MASTERBALL = ITEMS.register("masterball", () -> new com.jose.pokecraft.item.PokeballItem(new Item.Properties().stacksTo(1), com.jose.pokecraft.item.PokeballItem.Tier.MASTERBALL));
  
+    // Golosina de Experiencia: clic derecho sobre un aliado propio = 1 nivel de XP en su barra (ver MobLevelEvents).
+    public static final DeferredHolder<Item, Item> XP_TREAT = ITEMS.register("xp_treat", () -> new com.jose.pokecraft.item.XpTreatItem(new Item.Properties().stacksTo(16)));
+
     // Registro de Bloques e Ítems asociados (Usando MobJarBlockItem personalizado)
     public static final DeferredHolder<Block, Block> MOB_JAR_BLOCK = BLOCKS.register("mob_jar", () -> new com.jose.pokecraft.block.MobJarBlock(
         BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_LIGHT_BLUE).strength(0.5F).sound(SoundType.GLASS).noOcclusion()
@@ -55,6 +62,21 @@ public class PokeCraftMod {
         BlockEntityType.Builder.of(com.jose.pokecraft.block.MobJarBlockEntity::new, MOB_JAR_BLOCK.get()).build(null)
     );
  
+    // Mesa de Entrenamiento: gestión de nivel, slots de equipo y estadísticas del mob guardado en una bola.
+    public static final DeferredHolder<Block, Block> TRAINING_TABLE_BLOCK = BLOCKS.register("training_table", () -> new com.jose.pokecraft.block.TrainingTableBlock(
+        BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_RED).strength(2.5F).sound(SoundType.WOOD)
+    ));
+    public static final DeferredHolder<Item, Item> TRAINING_TABLE_ITEM = ITEMS.register("training_table", () -> new BlockItem(TRAINING_TABLE_BLOCK.get(), new Item.Properties()));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.jose.pokecraft.block.TrainingTableBlockEntity>> TRAINING_TABLE_BE = BLOCK_ENTITIES.register("training_table_be", () ->
+        BlockEntityType.Builder.of(com.jose.pokecraft.block.TrainingTableBlockEntity::new, TRAINING_TABLE_BLOCK.get()).build(null)
+    );
+
+    // Menú de la Mesa de Entrenamiento (el constructor (int, Inventory) es el del lado cliente).
+    public static final DeferredHolder<MenuType<?>, MenuType<com.jose.pokecraft.menu.TrainingTableMenu>> TRAINING_TABLE_MENU = MENUS.register("training_table", () ->
+        new MenuType<>(com.jose.pokecraft.menu.TrainingTableMenu::new, FeatureFlags.DEFAULT_FLAGS)
+    );
+
     // Registro de la pestaña creativa única de Pokecraft para que aparezcan todos los ítems
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> POKECRAFT_TAB = CREATIVE_MODE_TABS.register("pokecraft_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("creativetab.pokecraft.pokecraft_tab"))
@@ -67,6 +89,8 @@ public class PokeCraftMod {
                 output.accept(ULTRABALL.get());
                 output.accept(MASTERBALL.get());
                 output.accept(MOB_JAR_ITEM.get());
+                output.accept(TRAINING_TABLE_ITEM.get());
+                output.accept(XP_TREAT.get());
             })
             .build()
     );
@@ -75,6 +99,7 @@ public class PokeCraftMod {
         ITEMS.register(modEventBus);
         BLOCKS.register(modEventBus);
         BLOCK_ENTITIES.register(modEventBus);
+        MENUS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
         ATTACHMENT_TYPES.register(modEventBus);
     }
