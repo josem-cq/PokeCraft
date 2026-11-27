@@ -68,10 +68,6 @@ public class PokeCraftMod {
     ));
     public static final DeferredHolder<Item, Item> TRAINING_TABLE_ITEM = ITEMS.register("training_table", () -> new BlockItem(TRAINING_TABLE_BLOCK.get(), new Item.Properties()));
 
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.jose.pokecraft.block.TrainingTableBlockEntity>> TRAINING_TABLE_BE = BLOCK_ENTITIES.register("training_table_be", () ->
-        BlockEntityType.Builder.of(com.jose.pokecraft.block.TrainingTableBlockEntity::new, TRAINING_TABLE_BLOCK.get()).build(null)
-    );
-
     // Menú de la Mesa de Entrenamiento (el constructor (int, Inventory) es el del lado cliente).
     public static final DeferredHolder<MenuType<?>, MenuType<com.jose.pokecraft.menu.TrainingTableMenu>> TRAINING_TABLE_MENU = MENUS.register("training_table", () ->
         new MenuType<>(com.jose.pokecraft.menu.TrainingTableMenu::new, FeatureFlags.DEFAULT_FLAGS)

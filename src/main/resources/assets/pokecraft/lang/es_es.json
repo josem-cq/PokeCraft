@@ -105,10 +105,11 @@
   "message.pokecraft.xp_treat.fed": "%1$s ganó experiencia (%2$d nivel(es) disponible(s))",
   "message.pokecraft.xp_treat.max": "%1$s ya ha alcanzado el nivel máximo",
   "tooltip.pokecraft.level": "Nivel: %1$d / %2$d",
-  "tooltip.pokecraft.potion": "Poción permanente: %1$s",
+  "tooltip.pokecraft.potion": "Poción: %1$s",
   "tooltip.pokecraft.reserve": "Bola de reserva: %1$s",
   "gui.pokecraft.training.level": "Nivel %1$d / %2$d",
   "gui.pokecraft.training.available": "Niveles disponibles: %1$d",
+  "gui.pokecraft.training.bar_tooltip": "Matar a un mob tan fuerte como él llena el %1$d%% de la barra",
   "gui.pokecraft.training.level_up": "Subir de nivel (gasta 1 nivel disponible)",
   "gui.pokecraft.training.ball_slot": "Bola",
   "gui.pokecraft.training.no_mob": "Coloca una bola con un mob capturado",
@@ -126,11 +127,11 @@
   "pokecraft.slot.feet": "Botas",
   "pokecraft.slot.main_hand": "Mano principal",
   "pokecraft.slot.off_hand": "Mano secundaria",
-  "pokecraft.slot.potion": "Poción permanente",
+  "pokecraft.slot.potion": "Poción",
   "pokecraft.slot.reserve_ball": "Bola de reserva",
   "pokecraft.slot.armor.hint": "Armadura: suma defensa y aplica sus encantamientos",
-  "pokecraft.slot.main_hand.hint": "Arma: suma ataque y aplica sus encantamientos",
+  "pokecraft.slot.main_hand.hint": "Arma, herramienta, bloque o tótem (no pociones, flechas, fuegos artificiales, bolas ni armadura)",
   "pokecraft.slot.off_hand.hint": "Tótem de la inmortalidad, flechas o cohetes",
-  "pokecraft.slot.potion.hint": "Solo pociones persistentes: efecto permanente mientras el mob esté activo",
-  "pokecraft.slot.reserve_ball.hint": "Bola vacía: ante un golpe letal el mob se guarda en ella en vez de morir"
+  "pokecraft.slot.potion.hint": "Cualquier poción con duración (las instantáneas no se admiten): su efecto se mantiene mientras el mob esté activo",
+  "pokecraft.slot.reserve_ball.hint": "Bola vacía de reserva: ante un golpe letal el mob se guarda en su bola original en vez de morir (se gasta)"
 }

@@ -7,25 +7,34 @@ import com.jose.pokecraft.level.MobLevelManager;
 import com.jose.pokecraft.level.MobSlot;
 import com.jose.pokecraft.menu.TrainingTableMenu;
 import com.jose.pokecraft.pokedex.MobStrengthManager;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.locale.Language;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Pantalla de la Mesa de Entrenamiento, con el aspecto de las interfaces vanilla (paneles biselados dibujados en
@@ -40,10 +49,17 @@ public class TrainingTableScreen extends AbstractContainerScreen<TrainingTableMe
     private static final int SLOT_FILL = 0xFF8B8B8B;
     private static final int TEXT_DARK = 0xFF404040;
 
+    // Barra de experiencia con los sprites vanilla del HUD del jugador (182 x 5).
+    private static final ResourceLocation XP_BG = ResourceLocation.withDefaultNamespace("hud/experience_bar_background");
+    private static final ResourceLocation XP_FG = ResourceLocation.withDefaultNamespace("hud/experience_bar_progress");
     private static final int BAR_X = 8;
     private static final int BAR_Y = 19;
-    private static final int BAR_W = 196;
-    private static final int BAR_H = 10;
+    private static final int BAR_W = 182;
+    private static final int BAR_H = 5;
+
+    /** Iconos "fantasma" en gris de cada slot vacío: se generan una vez a partir de las texturas reales de los ítems. */
+    private record Ghost(ResourceLocation texture, int width, int height) {}
+    private static final Map<String, Ghost> GHOSTS = new HashMap<>();
     private static final int INFO_X = 34;
     private static final int INFO_Y = 44;
     private static final int INFO_W = 126;
@@ -65,7 +81,7 @@ public class TrainingTableScreen extends AbstractContainerScreen<TrainingTableMe
     protected void init() {
         super.init();
         levelUpButton = addRenderableWidget(Button.builder(Component.literal("+"), button -> sendButton(TrainingTableMenu.BTN_LEVEL_UP))
-                .bounds(leftPos + 212, topPos + 15, 36, 14)
+                .bounds(leftPos + 198, topPos + 15, 50, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.pokecraft.training.level_up")))
                 .build());
     }
@@ -100,13 +116,22 @@ public class TrainingTableScreen extends AbstractContainerScreen<TrainingTableMe
         int y = topPos;
         raised(g, x, y, imageWidth, imageHeight, PANEL_FILL);
 
-        // Barra de progreso del nivel actual
-        inset(g, x + BAR_X - 1, y + BAR_Y - 1, BAR_W + 2, BAR_H + 2, 0xFF2B2B2B);
+        // Barra de experiencia (estilo HUD vanilla) con una división cada vez que "cabe" la XP de matar a un mob tan
+        // fuerte como el propio mob (ver TrainingTableMenu.D_STEP).
+        int bx = x + BAR_X;
+        int by = y + BAR_Y;
+        g.blitSprite(XP_BG, bx, by, BAR_W, BAR_H);
         if (menu.hasMob()) {
             int fill = BAR_W * menu.getData(TrainingTableMenu.D_PROGRESS) / 1000;
             if (fill > 0) {
-                g.fill(x + BAR_X, y + BAR_Y, x + BAR_X + fill, y + BAR_Y + BAR_H, 0xFF3FA83F);
-                g.fill(x + BAR_X, y + BAR_Y, x + BAR_X + fill, y + BAR_Y + 3, 0xFF7CE07C);
+                g.blitSprite(XP_FG, BAR_W, BAR_H, 0, 0, bx, by, fill, BAR_H);
+            }
+            int step = menu.getData(TrainingTableMenu.D_STEP);
+            if (step > 0 && step < 1000) {
+                for (int mark = step; mark < 1000; mark += step) {
+                    int px = bx + BAR_W * mark / 1000;
+                    g.fill(px, by, px + 1, by + BAR_H, 0xB0000000);
+                }
             }
         }
 
@@ -114,37 +139,102 @@ public class TrainingTableScreen extends AbstractContainerScreen<TrainingTableMe
         inset(g, x + INFO_X, y + INFO_Y, INFO_W, INFO_H, 0xFF2B2B2B);
         drawDetails(g, x + INFO_X + 6, y + INFO_Y + 6);
 
-        // Huecos de todos los slots y, en los vacíos y desbloqueados, el icono "fantasma" de lo que admiten.
+        // Huecos de todos los slots y, en los vacíos (también los bloqueados), el icono del ítem que admiten en gris.
         for (Slot slot : menu.slots) {
             inset(g, x + slot.x - 1, y + slot.y - 1, 18, 18, SLOT_FILL);
         }
         for (Slot slot : menu.slots) {
-            ItemStack ghost = ItemStack.EMPTY;
+            if (slot.hasItem()) continue;
+            Ghost ghost = null;
             if (slot.index == 0) {
-                ghost = new ItemStack(PokeCraftMod.POKEBALL.get());
-            } else if (slot instanceof TrainingTableMenu.GearSlot gear && !gear.isLocked()) {
+                ghost = ghostFor(null);
+            } else if (slot instanceof TrainingTableMenu.GearSlot gear) {
                 ghost = ghostFor(gear.type());
             }
-            if (!ghost.isEmpty() && !slot.hasItem()) {
-                g.renderFakeItem(ghost, x + slot.x, y + slot.y);
-                g.fill(x + slot.x, y + slot.y, x + slot.x + 16, y + slot.y + 16, 0xB08B8B8B);
+            if (ghost != null) {
+                RenderSystem.enableBlend();
+                g.setColor(1.0F, 1.0F, 1.0F, 0.65F);
+                g.blit(ghost.texture(), x + slot.x, y + slot.y, 16, 16, 0.0F, 0.0F,
+                        ghost.width(), ghost.height(), ghost.width(), ghost.height());
+                g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
             }
         }
         g.drawString(font, Component.translatable("gui.pokecraft.training.ball_slot"),
                 x + TrainingTableMenu.BALL_X - 1, y + TrainingTableMenu.BALL_Y + 21, TEXT_DARK, false);
     }
 
-    private static ItemStack ghostFor(MobSlot type) {
-        return new ItemStack(switch (type) {
-            case HEAD -> Items.IRON_HELMET;
-            case CHEST -> Items.IRON_CHESTPLATE;
-            case LEGS -> Items.IRON_LEGGINGS;
-            case FEET -> Items.IRON_BOOTS;
-            case MAIN_HAND -> Items.IRON_SWORD;
-            case OFF_HAND -> Items.TOTEM_OF_UNDYING;
-            case POTION -> Items.LINGERING_POTION;
-            case RESERVE_BALL -> PokeCraftMod.POKEBALL.get();
-        });
+    // ---------------------------------------------------------------------------------------------
+    // Iconos en gris de los slots vacíos
+    // ---------------------------------------------------------------------------------------------
+
+    private static List<ResourceLocation> ghostSources(@Nullable MobSlot type) {
+        if (type == null || type == MobSlot.RESERVE_BALL) {
+            return List.of(ResourceLocation.fromNamespaceAndPath(PokeCraftMod.MOD_ID, "item/pokeball"));
+        }
+        return switch (type) {
+            case HEAD -> List.of(ResourceLocation.withDefaultNamespace("item/iron_helmet"));
+            case CHEST -> List.of(ResourceLocation.withDefaultNamespace("item/iron_chestplate"));
+            case LEGS -> List.of(ResourceLocation.withDefaultNamespace("item/iron_leggings"));
+            case FEET -> List.of(ResourceLocation.withDefaultNamespace("item/iron_boots"));
+            case MAIN_HAND -> List.of(ResourceLocation.withDefaultNamespace("item/iron_sword"));
+            case OFF_HAND -> List.of(ResourceLocation.withDefaultNamespace("item/totem_of_undying"));
+            case POTION -> List.of(ResourceLocation.withDefaultNamespace("item/potion_overlay"),
+                    ResourceLocation.withDefaultNamespace("item/potion"));
+            case RESERVE_BALL -> List.of(ResourceLocation.fromNamespaceAndPath(PokeCraftMod.MOD_ID, "item/pokeball"));
+        };
+    }
+
+    /** null = slot de la bola del mob. Devuelve null si no se pudo generar (el slot queda simplemente sin icono). */
+    @Nullable
+    private Ghost ghostFor(@Nullable MobSlot type) {
+        String key = type == null ? "ball" : type.name().toLowerCase(Locale.ROOT);
+        if (GHOSTS.containsKey(key)) return GHOSTS.get(key);
+        Ghost ghost = null;
+        try {
+            ghost = buildGhost(key, ghostSources(type));
+        } catch (IOException | RuntimeException ignored) {
+            // sin icono: nunca debe romper la pantalla
+        }
+        GHOSTS.put(key, ghost);
+        return ghost;
+    }
+
+    /** Lee las texturas reales, las pasa a escala de grises (conservando la transparencia) y las apila en una sola. */
+    @Nullable
+    private Ghost buildGhost(String key, List<ResourceLocation> sources) throws IOException {
+        if (minecraft == null) return null;
+        NativeImage out = null;
+        try {
+            for (ResourceLocation id : sources) {
+                Optional<Resource> resource = minecraft.getResourceManager().getResource(id.withPrefix("textures/").withSuffix(".png"));
+                if (resource.isEmpty()) continue;
+                try (InputStream in = resource.get().open(); NativeImage layer = NativeImage.read(in)) {
+                    if (out == null) out = new NativeImage(layer.getWidth(), layer.getHeight(), true);
+                    if (layer.getWidth() != out.getWidth() || layer.getHeight() != out.getHeight()) continue;
+                    for (int py = 0; py < layer.getHeight(); py++) {
+                        for (int px = 0; px < layer.getWidth(); px++) {
+                            int pixel = layer.getPixelRGBA(px, py); // ABGR
+                            int alpha = (pixel >>> 24) & 0xFF;
+                            if (alpha == 0) continue;
+                            int r = pixel & 0xFF;
+                            int gr = (pixel >> 8) & 0xFF;
+                            int b = (pixel >> 16) & 0xFF;
+                            int luma = (int) (0.299D * r + 0.587D * gr + 0.114D * b);
+                            int gray = 60 + luma * 150 / 255; // gris medio: se ve "apagado" sobre el slot
+                            out.setPixelRGBA(px, py, (alpha << 24) | (gray << 16) | (gray << 8) | gray);
+                        }
+                    }
+                }
+            }
+            if (out == null) return null;
+            ResourceLocation texture = ResourceLocation.fromNamespaceAndPath(PokeCraftMod.MOD_ID, "gui/ghost/" + key);
+            Ghost ghost = new Ghost(texture, out.getWidth(), out.getHeight());
+            minecraft.getTextureManager().register(texture, new DynamicTexture(out));
+            out = null; // ahora es de la textura
+            return ghost;
+        } finally {
+            if (out != null) out.close();
+        }
     }
 
     private void drawDetails(GuiGraphics g, int px, int py) {
@@ -199,19 +289,20 @@ public class TrainingTableScreen extends AbstractContainerScreen<TrainingTableMe
 
         boolean pending = menu.hasMob() && menu.getData(TrainingTableMenu.D_PENDING) > 0;
         for (Slot slot : menu.slots) {
-            if (slot instanceof TrainingTableMenu.GearSlot gear && gear.isLocked()) {
+            if (menu.hasMob() && slot instanceof TrainingTableMenu.GearSlot gear && gear.isLocked()) {
                 drawLock(g, slot.x, slot.y, pending);
             }
         }
     }
 
+    /** Candado pequeño en la esquina inferior derecha del slot (el icono en gris queda debajo). */
     private static void drawLock(GuiGraphics g, int x, int y, boolean unlockable) {
-        g.fill(x, y, x + 16, y + 16, 0xD0373737);
-        g.fill(x + 5, y + 3, x + 11, y + 5, 0xFFB0B0B0);   // arco del candado
-        g.fill(x + 5, y + 3, x + 7, y + 8, 0xFFB0B0B0);
-        g.fill(x + 9, y + 3, x + 11, y + 8, 0xFFB0B0B0);
-        g.fill(x + 4, y + 8, x + 12, y + 14, 0xFFD8A82A);  // cuerpo
-        g.fill(x + 7, y + 10, x + 9, y + 12, 0xFF5A4410);  // ojo de la cerradura
+        g.fill(x + 10, y + 6, x + 14, y + 7, 0xFFC8C8C8);   // arco
+        g.fill(x + 10, y + 6, x + 11, y + 10, 0xFFC8C8C8);
+        g.fill(x + 13, y + 6, x + 14, y + 10, 0xFFC8C8C8);
+        g.fill(x + 8, y + 9, x + 16, y + 16, 0xFF202020);   // borde del cuerpo
+        g.fill(x + 9, y + 10, x + 15, y + 15, 0xFFE0B030);  // cuerpo
+        g.fill(x + 11, y + 11, x + 13, y + 13, 0xFF503C10); // ojo de la cerradura
         if (unlockable) {
             g.renderOutline(x - 1, y - 1, 18, 18, 0xFF55FF55);
         }
@@ -235,6 +326,14 @@ public class TrainingTableScreen extends AbstractContainerScreen<TrainingTableMe
 
     @Override
     protected void renderTooltip(GuiGraphics g, int mouseX, int mouseY) {
+        if (menu.hasMob() && menu.getCarried().isEmpty() && hoveredSlot == null
+                && mouseX >= leftPos + BAR_X && mouseX < leftPos + BAR_X + BAR_W
+                && mouseY >= topPos + BAR_Y - 1 && mouseY < topPos + BAR_Y + BAR_H + 1) {
+            int percent = Math.min(100, Math.round(menu.getData(TrainingTableMenu.D_STEP) / 10.0F));
+            g.renderComponentTooltip(font, List.of(Component.translatable("gui.pokecraft.training.bar_tooltip", percent)
+                    .withStyle(ChatFormatting.GRAY)), mouseX, mouseY);
+            return;
+        }
         if (menu.getCarried().isEmpty() && hoveredSlot != null && !hoveredSlot.hasItem()) {
             if (hoveredSlot instanceof TrainingTableMenu.GearSlot gear) {
                 g.renderComponentTooltip(font, gearTooltip(gear), mouseX, mouseY);

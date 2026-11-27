@@ -55,13 +55,16 @@ public class TrainingTableMenu extends AbstractContainerMenu {
     public static final int D_AVAILABLE = 3;
     public static final int D_MASK = 4;
     public static final int D_PENDING = 5;
-    private static final int D_COUNT = 6;
+    /** Lo que llena la barra matar a un mob tan fuerte como este, en milésimas de barra (para dibujar las divisiones). */
+    public static final int D_STEP = 6;
+    private static final int D_COUNT = 7;
 
     public static final int BALL_X = 10;
     public static final int BALL_Y = 80;
     private static final int INV_START = 9;
 
-    private final Container ballContainer;
+    /** Bola de ESTE jugador: es propia del menú (como la cuadrícula de crafteo) y vuelve a su inventario al cerrar. */
+    private final Container ballContainer = new SimpleContainer(1);
     private final SimpleContainer gear = new SimpleContainer(MobSlot.values().length);
     private final ContainerData data = new SimpleContainerData(D_COUNT);
     private final ContainerLevelAccess access;
@@ -73,12 +76,11 @@ public class TrainingTableMenu extends AbstractContainerMenu {
 
     /** Constructor del cliente (lo usa el MenuType): el contenido llega por los paquetes de sincronización. */
     public TrainingTableMenu(int containerId, Inventory inventory) {
-        this(containerId, inventory, new SimpleContainer(1), ContainerLevelAccess.NULL);
+        this(containerId, inventory, ContainerLevelAccess.NULL);
     }
 
-    public TrainingTableMenu(int containerId, Inventory inventory, Container ballContainer, ContainerLevelAccess access) {
+    public TrainingTableMenu(int containerId, Inventory inventory, ContainerLevelAccess access) {
         super(PokeCraftMod.TRAINING_TABLE_MENU.get(), containerId);
-        this.ballContainer = ballContainer;
         this.access = access;
         this.level = inventory.player.level();
         this.registries = level.registryAccess();
@@ -143,6 +145,8 @@ public class TrainingTableMenu extends AbstractContainerMenu {
         data.set(D_AVAILABLE, d.available);
         data.set(D_MASK, d.unlockedMask);
         data.set(D_PENDING, d.pendingUnlocks());
+        double own = type != null ? MobLevelManager.xpStrength(type, level) : 0.0D;
+        data.set(D_STEP, perLevel > 0.0D ? (int) Math.min(1000L, Math.round(own / perLevel * 1000.0D)) : 1000);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -287,6 +291,15 @@ public class TrainingTableMenu extends AbstractContainerMenu {
         if (stack.getCount() == original.getCount()) return ItemStack.EMPTY;
         slot.onTake(player, stack);
         return original;
+    }
+
+    /** Como la mesa de crafteo: al cerrar, la bola vuelve al inventario del jugador (o cae a sus pies si no cabe). */
+    @Override
+    public void removed(Player player) {
+        super.removed(player);
+        if (!level.isClientSide) {
+            clearContainer(player, ballContainer);
+        }
     }
 
     @Override

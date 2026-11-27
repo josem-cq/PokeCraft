@@ -3,10 +3,12 @@ package com.jose.pokecraft.level;
 import com.jose.pokecraft.item.PokeballItem;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.ArrowItem;
 import net.minecraft.world.item.Equipable;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.PotionItem;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -14,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
  * (1 << ordinal) en la máscara que se guarda en el NBT: no reordenes los valores existentes, añade nuevos al final.
  *
  * Los 6 primeros que tienen {@link #equipment()} son el equipamiento REAL del mob (ArmorItems / HandItems del NBT de la
- * entidad); la poción permanente y la bola de reserva se guardan en los datos persistentes (ver {@link MobLevelData}).
+ * entidad); la poción y la bola de reserva se guardan en los datos persistentes (ver {@link MobLevelData}).
  */
 public enum MobSlot {
     HEAD("head", "armor", EquipmentSlot.HEAD, 3),
@@ -73,9 +75,11 @@ public enum MobSlot {
         if (stack.isEmpty()) return false;
         return switch (this) {
             case HEAD, CHEST, LEGS, FEET -> stack.getItem() instanceof Equipable equipable && equipable.getEquipmentSlot() == equipment;
-            case MAIN_HAND -> true;
+            case MAIN_HAND -> !(stack.getItem() instanceof PotionItem) && !(stack.getItem() instanceof ArrowItem)
+                    && !(stack.getItem() instanceof PokeballItem) && !(stack.getItem() instanceof ArmorItem)
+                    && !stack.is(Items.ELYTRA) && !stack.is(Items.FIREWORK_ROCKET);
             case OFF_HAND -> stack.is(Items.TOTEM_OF_UNDYING) || stack.getItem() instanceof ArrowItem || stack.is(Items.FIREWORK_ROCKET);
-            case POTION -> MobLevelManager.hasPermanentEffect(stack);
+            case POTION -> MobLevelManager.hasTimedEffect(stack);
             case RESERVE_BALL -> stack.getItem() instanceof PokeballItem && !MobLevelManager.hasCapturedMob(stack);
         };
     }

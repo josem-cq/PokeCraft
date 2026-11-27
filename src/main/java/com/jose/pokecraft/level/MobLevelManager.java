@@ -31,7 +31,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.world.item.PotionItem;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
@@ -249,9 +249,12 @@ public final class MobLevelManager {
     // Poción permanente
     // ---------------------------------------------------------------------------------------------
 
-    /** ¿Es una poción persistente con al menos un efecto que dure en el tiempo? Las instantáneas se rechazan. */
-    public static boolean hasPermanentEffect(ItemStack stack) {
-        if (!stack.is(Items.LINGERING_POTION)) return false;
+    /**
+     * ¿Es una poción (normal, de salpicadura o persistente) con al menos un efecto que dure en el tiempo, es decir, con
+     * temporizador? Las instantáneas (curación, daño...) se rechazan.
+     */
+    public static boolean hasTimedEffect(ItemStack stack) {
+        if (!(stack.getItem() instanceof PotionItem)) return false;
         PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
         if (contents == null) return false;
         for (MobEffectInstance effect : contents.getAllEffects()) {
@@ -266,7 +269,7 @@ public final class MobLevelManager {
      */
     public static void tickPotion(Mob mob) {
         MobLevelData data = readLive(mob);
-        if (!data.isUnlocked(MobSlot.POTION) || !hasPermanentEffect(data.potion)) return;
+        if (!data.isUnlocked(MobSlot.POTION) || !hasTimedEffect(data.potion)) return;
         PotionContents contents = data.potion.get(DataComponents.POTION_CONTENTS);
         if (contents == null) return;
         for (MobEffectInstance effect : contents.getAllEffects()) {
@@ -296,7 +299,8 @@ public final class MobLevelManager {
         ItemStack reserve = data.reserve;
         if (reserve.isEmpty() || !(reserve.getItem() instanceof PokeballItem) || hasCapturedMob(reserve)) return false;
 
-        // La bola de reserva se gasta: no debe quedar anidada dentro del propio mob guardado.
+        // La bola de reserva es solo el "permiso" para esta acción: se gasta (así no queda anidada en el mob guardado)
+        // y NO sustituye a la bola original: la que cae es la bola con la que se capturó el mob.
         data.reserve = ItemStack.EMPTY;
         writeLive(mob, data);
 
@@ -309,7 +313,7 @@ public final class MobLevelManager {
         mob.save(entityTag);
         entityTag.remove("UUID");
 
-        ItemStack filled = CapturedBall.createFilled(reserve.getItem(), entityTag,
+        ItemStack filled = CapturedBall.createFilled(CapturedBall.resolve(entityTag), entityTag,
                 mob.hasCustomName() ? mob.getCustomName() : null);
         ItemEntity drop = new ItemEntity(level, mob.getX(), mob.getY(), mob.getZ(), filled);
         drop.setPickUpDelay(20);
