@@ -18,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -36,7 +37,9 @@ import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -110,6 +113,14 @@ public final class CapturedMobStats {
         //     aunque el NBT ya traiga las permanentes guardadas) y sin tocar el NBT.
         MobLevelData levelData = MobLevelData.read(MobLevelManager.persistentOf(entityTag), registries);
         MobLevelManager.applyLevelBonuses(attributes, levelData.level, false);
+
+        // 1c. Efectos: los modificadores de los ya activos (incluidos los permanentes con que aparezca el mob) suelen
+        //     venir guardados en "attributes", pero los de la poción del slot pueden no haberse aplicado aún porque el
+        //     mob está en la bola. Se aplican todos con el motor (quita el modificador por id antes de ponerlo, así que
+        //     no se duplica) y siempre con el nivel MÁS ALTO entre el guardado y el de la poción.
+        for (Map.Entry<Holder<MobEffect>, Integer> effect : activeEffects(entityTag, registries).entrySet()) {
+            effect.getKey().value().addAttributeModifiers(attributes, effect.getValue());
+        }
 
         // 2. Equipamiento: sus modificadores de atributo (armadura, daño, salud, etc.) como en LivingEntity.
         List<Equipped> equipment = registries != null ? readEquipment(entityTag, registries) : List.of();
@@ -320,7 +331,7 @@ public final class CapturedMobStats {
 
         appendLevelLines(tooltip, entityTag, registries);
         appendStatLines(tooltip, compute(entityTag, registries));
-        appendActiveEffects(tooltip, entityTag);
+        appendActiveEffects(tooltip, entityTag, registries);
 
         if (entityTag.contains("id", Tag.TAG_STRING)) {
             tooltip.add(Component.literal("§7ID: " + entityTag.getString("id")));
@@ -358,30 +369,46 @@ public final class CapturedMobStats {
         }
     }
 
-    private static void appendActiveEffects(List<Component> tooltip, CompoundTag entityTag) {
+    /**
+     * Efectos del mob guardado: los de su NBT (active_effects) más los de la poción del slot si está desbloqueado.
+     * Si un efecto aparece en ambos sitios manda el nivel más alto (los efectos se suman, nunca se sustituyen).
+     */
+    public static Map<Holder<MobEffect>, Integer> activeEffects(CompoundTag entityTag, @Nullable HolderLookup.Provider registries) {
+        Map<Holder<MobEffect>, Integer> result = new LinkedHashMap<>();
+
         ListTag effects = null;
         if (entityTag.contains("active_effects", Tag.TAG_LIST)) {
             effects = entityTag.getList("active_effects", Tag.TAG_COMPOUND);
         } else if (entityTag.contains("ActiveEffects", Tag.TAG_LIST)) {
             effects = entityTag.getList("ActiveEffects", Tag.TAG_COMPOUND);
         }
-        if (effects == null || effects.isEmpty()) return;
+        if (effects != null) {
+            for (int i = 0; i < effects.size(); i++) {
+                CompoundTag effectTag = effects.getCompound(i);
+                ResourceLocation location = ResourceLocation.tryParse(effectTag.getString("id"));
+                if (location == null) continue;
+                BuiltInRegistries.MOB_EFFECT.getHolder(location)
+                        .ifPresent(holder -> result.merge(holder, (int) effectTag.getByte("amplifier") & 0xFF, Math::max));
+            }
+        }
+
+        MobLevelData data = MobLevelData.read(MobLevelManager.persistentOf(entityTag), registries);
+        if (data.isUnlocked(MobSlot.POTION)) {
+            for (MobEffectInstance effect : MobLevelManager.timedEffectsOf(data.potion)) {
+                result.merge(effect.getEffect(), effect.getAmplifier(), Math::max);
+            }
+        }
+        return result;
+    }
+
+    private static void appendActiveEffects(List<Component> tooltip, CompoundTag entityTag, @Nullable HolderLookup.Provider registries) {
+        Map<Holder<MobEffect>, Integer> effects = activeEffects(entityTag, registries);
+        if (effects.isEmpty()) return;
 
         tooltip.add(Component.literal("§7Efectos activos:"));
-        for (int i = 0; i < effects.size(); i++) {
-            CompoundTag effectTag = effects.getCompound(i);
-            String effectId = effectTag.getString("id");
-            int amplifier = effectTag.getInt("amplifier");
-
-            Component effectName = Component.literal(effectId);
-            ResourceLocation location = ResourceLocation.tryParse(effectId);
-            if (location != null) {
-                MobEffect mobEffect = BuiltInRegistries.MOB_EFFECT.getOptional(location).orElse(null);
-                if (mobEffect != null) {
-                    effectName = Component.translatable(mobEffect.getDescriptionId());
-                }
-            }
-            tooltip.add(Component.literal(" §7- ").append(effectName).append(" (Nivel " + (amplifier + 1) + ")"));
+        for (Map.Entry<Holder<MobEffect>, Integer> entry : effects.entrySet()) {
+            Component effectName = Component.translatable(entry.getKey().value().getDescriptionId());
+            tooltip.add(Component.literal(" §7- ").append(effectName).append(" (Nivel " + (entry.getValue() + 1) + ")"));
         }
     }
 

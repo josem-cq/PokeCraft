@@ -62,9 +62,21 @@ public class MobLevelEvents {
         MobLevelManager.awardKillXp(dead, event.getSource().getEntity());
     }
 
+    /** Recogida de ítems: ver MobLevelManager#beginPickupGate (se apaga antes del tick del mob y se restaura después). */
+    @SubscribeEvent
+    public static void onEntityTickPre(EntityTickEvent.Pre event) {
+        if (event.getEntity() instanceof Mob mob && mob.canPickUpLoot()
+                && !mob.level().isClientSide() && MobOrderManager.isFriendly(mob)) {
+            MobLevelManager.beginPickupGate(mob);
+        }
+    }
+
     /** Renueva el efecto de la poción permanente cada 40 ticks (solo se mira el tickCount primero: es barato). */
     @SubscribeEvent
     public static void onEntityTick(EntityTickEvent.Post event) {
+        if (event.getEntity() instanceof Mob gated && !gated.level().isClientSide()) {
+            MobLevelManager.endPickupGate(gated);
+        }
         if (event.getEntity() instanceof Mob mob && mob.tickCount % 40 == 0
                 && !mob.level().isClientSide() && MobOrderManager.isFriendly(mob)) {
             MobLevelManager.tickPotion(mob);

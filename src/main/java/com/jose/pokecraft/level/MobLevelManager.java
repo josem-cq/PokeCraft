@@ -31,12 +31,14 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.PotionItem;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.SuspiciousStewEffects;
+import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -243,6 +245,9 @@ public final class MobLevelManager {
                 mob.setDropChance(slot.equipment(), 2.0F);
             }
         }
+
+        // Efectos de la poción del slot desde el primer tick (con sus partículas), sin esperar al ciclo de renovación.
+        applyPotionEffects(mob, data);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -250,32 +255,90 @@ public final class MobLevelManager {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * ¿Es una poción (normal, de salpicadura o persistente) con al menos un efecto que dure en el tiempo, es decir, con
-     * temporizador? Las instantáneas (curación, daño...) se rechazan.
+     * Efectos CON TEMPORIZADOR que da un ítem: los de una poción (normal, de salpicadura, persistente, flecha con
+     * efecto...), los de una comida (manzana dorada, estofado sospechoso...) y los del estofado sospechoso. Los
+     * instantáneos (curación, daño, saturación) no cuentan. Lista vacía = el ítem no vale para el slot de poción.
      */
-    public static boolean hasTimedEffect(ItemStack stack) {
-        if (!(stack.getItem() instanceof PotionItem)) return false;
-        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
-        if (contents == null) return false;
-        for (MobEffectInstance effect : contents.getAllEffects()) {
-            if (!effect.getEffect().value().isInstantenous()) return true;
+    public static List<MobEffectInstance> timedEffectsOf(ItemStack stack) {
+        List<MobEffectInstance> result = new ArrayList<>();
+        if (stack.isEmpty()) return result;
+
+        PotionContents potion = stack.get(DataComponents.POTION_CONTENTS);
+        if (potion != null) {
+            for (MobEffectInstance effect : potion.getAllEffects()) addTimed(result, effect);
         }
-        return false;
+        FoodProperties food = stack.get(DataComponents.FOOD);
+        if (food != null) {
+            for (FoodProperties.PossibleEffect possible : food.effects()) addTimed(result, possible.effect());
+        }
+        SuspiciousStewEffects stew = stack.get(DataComponents.SUSPICIOUS_STEW_EFFECTS);
+        if (stew != null) {
+            for (SuspiciousStewEffects.Entry entry : stew.effects()) addTimed(result, entry.createEffectInstance());
+        }
+        return result;
+    }
+
+    private static void addTimed(List<MobEffectInstance> list, MobEffectInstance effect) {
+        if (!effect.getEffect().value().isInstantenous()) list.add(effect);
+    }
+
+    /** ¿El ítem da al menos un efecto con temporizador? (condición para colocarlo en el slot de poción). */
+    public static boolean hasTimedEffect(ItemStack stack) {
+        return !timedEffectsOf(stack).isEmpty();
     }
 
     /**
-     * Cada 40 ticks renueva el efecto de la poción del slot (si está desbloqueado). Al renovarse con una duración corta,
-     * si se quita la poción o el mob sale del juego el efecto simplemente caduca en unos segundos.
+     * Cada 40 ticks renueva los efectos del slot de poción (si está desbloqueado). Se renuevan con una duración corta:
+     * si se quita el ítem o el mob sale del juego, caducan solos en unos segundos.
      */
     public static void tickPotion(Mob mob) {
-        MobLevelData data = readLive(mob);
-        if (!data.isUnlocked(MobSlot.POTION) || !hasTimedEffect(data.potion)) return;
-        PotionContents contents = data.potion.get(DataComponents.POTION_CONTENTS);
-        if (contents == null) return;
-        for (MobEffectInstance effect : contents.getAllEffects()) {
-            if (effect.getEffect().value().isInstantenous()) continue;
+        applyPotionEffects(mob, readLive(mob));
+    }
+
+    /**
+     * Los efectos se SUMAN a los que el mob ya tenga (también los permanentes con que aparezca, como los de algunas
+     * arañas): nunca se quita ni se sustituye nada; si el efecto ya existe, el motor conserva el más fuerte y, al
+     * caducar el de la poción, recupera el original. Son visibles (partículas de poción) y tocan los atributos como
+     * cualquier efecto.
+     */
+    private static void applyPotionEffects(Mob mob, MobLevelData data) {
+        if (!data.isUnlocked(MobSlot.POTION)) return;
+        for (MobEffectInstance effect : timedEffectsOf(data.potion)) {
             mob.addEffect(new MobEffectInstance(effect.getEffect(), POTION_REFRESH_DURATION,
-                    effect.getAmplifier(), true, false, true));
+                    effect.getAmplifier(), false, true, true));
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Recogida de ítems del suelo
+    // ---------------------------------------------------------------------------------------------
+
+    private static final String LOOT_GATE_KEY = "PokeCraftLootGate";
+
+    /**
+     * Un aliado no recoge del suelo un ítem cuyo slot de equipo ya está ocupado (ni siquiera uno mejor): se apaga su
+     * "recoger botín" solo durante este tick si hay uno de esos ítems a su alcance. Si el slot está libre, el mob
+     * recoge y equipa con la mecánica vanilla de siempre. Se llama antes del tick del mob y se deshace después
+     * ({@link #endPickupGate}); entre ambos el estado nunca se guarda en disco.
+     */
+    public static void beginPickupGate(Mob mob) {
+        if (!mob.canPickUpLoot() || !mob.isAlive()) return;
+        List<ItemEntity> items = mob.level().getEntitiesOfClass(ItemEntity.class, mob.getBoundingBox().inflate(1.0D, 0.0D, 1.0D));
+        for (ItemEntity item : items) {
+            ItemStack stack = item.getItem();
+            if (item.isRemoved() || stack.isEmpty() || item.hasPickUpDelay()) continue;
+            if (!mob.getItemBySlot(mob.getEquipmentSlotForItem(stack)).isEmpty()) {
+                mob.setCanPickUpLoot(false);
+                mob.getPersistentData().putBoolean(LOOT_GATE_KEY, true);
+                return;
+            }
+        }
+    }
+
+    public static void endPickupGate(Mob mob) {
+        if (mob.getPersistentData().getBoolean(LOOT_GATE_KEY)) {
+            mob.getPersistentData().remove(LOOT_GATE_KEY);
+            mob.setCanPickUpLoot(true);
         }
     }
 
@@ -306,7 +369,6 @@ public final class MobLevelManager {
 
         if (mob.isPassenger()) mob.stopRiding();
         if (mob.isLeashed()) mob.dropLeash(true, false);
-        mob.removeAllEffects();
         mob.setHealth(Math.max(1.0F, mob.getMaxHealth() * RESERVE_REVIVE_FRACTION));
 
         CompoundTag entityTag = new CompoundTag();
